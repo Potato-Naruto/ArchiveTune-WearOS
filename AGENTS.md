@@ -8,6 +8,7 @@ must preserve the invariants below.
 
 ## Fork invariants — never break
 
+- **Presentation**: Material 3 Expressive is the default interface style. Apple Music is selectable in Appearance and uses the existing experience preference to coordinate player, library, headers and tab bar in one atomic edit. Playback providers and source selection remain independent. Bottom search and scroll-hidden navigation are optional; keep the current settings UI rather than importing upstream's settings redesign.
 - **Tidal source**: `app/src/main/kotlin/moe/rukamori/archivetune/tidal/` (`TidalAudioProvider`, `TidalAccountManager`, `TidalInstanceHealthManager`, `TidalDns`, `TidalArtworkProvider`), Tidal settings/login UI, `utils/tidal/`; instance racing documented in `docs/instance-racing.md`. Live progressive-DASH streams use the `tidal-dash://` scheme routed in `MusicService`.
 - **Multi-source audio**: providers live in top-level packages `tidal/`, `deezer/` (DeezerCrypto + Media3 decrypting DataSource), `qobuz/` (+ `QobuzBackupProvider` via the kouzu.in mirror), `spotify/`; shared contract (`DirectStream`, `TitleMatch`, source priority) in `audiosource/`. Playback resolution goes through `resolveMultiSourceDataSpec` in `playback/MusicService.kt`; YouTube is the final fallback. Do not rewire playback around this.
 - **Spotify is catalog-only**: `spotifycore/` + app `spotify/` provide metadata, artwork, search, playlist import and track-to-YouTube identification. Spotify is never an `AudioSourceType`.
@@ -19,7 +20,7 @@ must preserve the invariants below.
 
 ## Modules & submodules
 
-- Gradle modules: `:app :core :spotifycore :canvas :jiosaavn :lastfm :musixmatch :shazamkit :morideobfuscator :lyrics:*`.
+- Gradle modules: `:app :core :spotifycore :canvas :jiosaavn :lastfm :musixmatch :shazamkit :morideobfuscator :lyrics:* :wear`. `:wear` is the Wear OS remote — a separate APK that must keep the phone app's `applicationId` and signing key, or the Data Layer will not route its messages to `WearCommandListenerService` (gms source set).
 - Submodules: `core` → **vossgraves/core** (NewPipeExtractor-based InnerTube client; a fork of rukamori/core that deliberately carries no `NetworkGatekeeper`, pinned on `feat/podcast-port` for the podcast models), `lyrics` → **4nx3b/lyrics**, `IconPack` → rukamori, `morideobfuscator` → rukamori. Commit + push inside a submodule first, then pin the gitlink; never leave a dirty or unpushed pointer. Never move `core` to a `rukamori/core` revision — its `NetworkGatekeeper` defaults to `connectionBlocked = true` and throws on every request.
 
 ## Build & test

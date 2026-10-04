@@ -104,6 +104,11 @@ haze = "1.7.2"
 # androidx.car.app — CarConnection, which the Android Auto settings screen uses to tell whether
 # the app is projected through Android Auto or running natively on Android Automotive.
 carApp = "1.7.0"
+# Wear OS remote: the Data Layer message channel between the :wear app and the gms phone build,
+# and the Wear Compose toolkit the watch screen is drawn with.
+playServicesWearable = "20.0.1"
+wearCompose = "1.7.0"
+wearOngoing = "1.1.0"
 
 
 [libraries]
@@ -112,6 +117,7 @@ annotation = { module = "androidx.annotation:annotation", version.ref = "annotat
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 coroutines-guava = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-guava", version.ref = "coroutinesGuava" }
 coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutinesGuava" }
+coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutinesGuava" }
 concurrent-futures = { module = "androidx.concurrent:concurrent-futures-ktx", version.ref = "concurrentFutures" }
 
 gradle = { module = "com.android.tools.build:gradle", version.ref = "agp" }
@@ -157,6 +163,12 @@ media3-okhttp = { module = "androidx.media3:media3-datasource-okhttp", version.r
 media3-session = { module = "androidx.media3:media3-session", version.ref = "media3" }
 media3-cast = { module = "androidx.media3:media3-cast", version.ref = "media3" }
 mediarouter = { module = "androidx.mediarouter:mediarouter", version = "1.8.1" }
+play-services-wearable = { module = "com.google.android.gms:play-services-wearable", version.ref = "playServicesWearable" }
+wear-compose-material3 = { module = "androidx.wear.compose:compose-material3", version.ref = "wearCompose" }
+wear-compose-foundation = { module = "androidx.wear.compose:compose-foundation", version.ref = "wearCompose" }
+wear-compose-navigation = { module = "androidx.wear.compose:compose-navigation", version.ref = "wearCompose" }
+# Ongoing Activity: what puts the playing track on the watch face (and Samsung's Now Bar).
+wear-ongoing = { module = "androidx.wear:wear-ongoing", version.ref = "wearOngoing" }
 
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }

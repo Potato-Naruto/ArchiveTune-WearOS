@@ -9,6 +9,7 @@
 package moe.rukamori.archivetune.playback
 
 import android.content.Context
+import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
@@ -412,8 +413,11 @@ class PlayerConnection(
         service.addToQueue(items)
     }
 
-    fun playFromVoiceSearch(query: String) {
-        service.playFromVoiceSearch(query)
+    fun playFromVoiceSearch(
+        query: String,
+        extras: Bundle? = null,
+    ) {
+        service.playFromVoiceSearch(query, extras)
     }
 
     fun toggleLike() {

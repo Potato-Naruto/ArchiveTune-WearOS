@@ -50,6 +50,7 @@ data class ReleaseInfo(
     val publishedAt: String,
     val htmlUrl: String,
     val downloadUrl: String? = null,
+    val prerelease: Boolean = false,
 )
 
 private data class ReleasesNetworkResult(
@@ -62,7 +63,7 @@ object Updater {
     private val client = HttpClient()
     private const val ReleaseCacheCheckIntervalMs: Long = 6 * 60 * 60 * 1000L
     private const val NightlyCacheCheckIntervalMs: Long = 15 * 60 * 1000L
-    private const val OWNER = "NatuneGroup/ArchiveTune"
+    private const val OWNER = "Potato-Naruto/ArchiveTune-WearOS"
     private const val StableReleaseBaseUrl = "https://github.com/$OWNER/releases"
 
     // Nightly and Canary are both served as GitHub pre-releases on this repo; they differ only by
@@ -130,8 +131,10 @@ object Updater {
                 else -> ""
             }
 
+    // This repo's releases carry one universal phone APK per distribution, not the per-ABI
+    // "app-…" artifacts the upstream release workflow produced.
     private fun stableReleaseArtifactName(): String =
-        "app-$releaseArtifactPrefix${BuildConfig.DEVICE}-${BuildConfig.ARCHITECTURE}-release.apk"
+        "ArchiveTune-phone-$releaseArtifactPrefix" + "universal-release.apk"
 
     private fun preReleaseArtifactName(channel: PreChannel): String =
         "app-$releaseArtifactPrefix${BuildConfig.DEVICE}-${BuildConfig.ARCHITECTURE}-${channel.artifactSuffix}.apk"
@@ -295,7 +298,8 @@ object Updater {
         // `preRelease.isEmpty()` stable filter below — `parseReleaseSemVerOrNull` falls back to
         // parsing the release name when the tag itself isn't SemVer, and "13.7.5" has no
         // pre-release identifier — and a stable-channel user would see a pre-release popup.
-        val nonPreRelease = releases.filterNot { preReleaseTagRegex.matches(it.tagName) }
+        val nonPreRelease =
+            releases.filterNot { preReleaseTagRegex.matches(it.tagName) || it.prerelease }
         if (nonPreRelease.isEmpty()) return null
 
         val parsed =
@@ -326,7 +330,23 @@ object Updater {
         parseReleaseSemVerOrNull(release)?.normalizedName()
 
     internal fun getReleaseVersionName(release: ReleaseInfo): String =
-        preferredReleaseVersionNameOrNull(release) ?: release.name.ifBlank { release.tagName }
+        preferredReleaseVersionNameOrNull(release)
+            ?: unversionedReleaseName(release)
+
+    // Tags like "wearos-release-3" carry no SemVer, so there is nothing to compare against
+    // BuildConfig.VERSION_NAME. Fall back to the build-number form isUpdateAvailable already
+    // understands: a release published after this install was last updated counts as newer.
+    private fun unversionedReleaseName(release: ReleaseInfo): String {
+        val label = release.name.ifBlank { release.tagName }
+        val publishedMs = runCatching { java.time.Instant.parse(release.publishedAt).toEpochMilli() }.getOrNull()
+        val installedMs =
+            runCatching {
+                App.instance.packageManager.getPackageInfo(App.instance.packageName, 0).lastUpdateTime
+            }.getOrNull()
+        if (publishedMs == null || installedMs == null) return label
+        val build = if (publishedMs > installedMs) BuildConfig.VERSION_CODE + 1 else BuildConfig.VERSION_CODE
+        return "$label (build $build)"
+    }
 
     private fun parseReleasesJson(
         json: String,
@@ -353,6 +373,7 @@ object Updater {
                     body = if (item.isNull("body")) null else item.optString("body"),
                     publishedAt = item.optString("published_at", ""),
                     htmlUrl = item.optString("html_url", ""),
+                    prerelease = item.optBoolean("prerelease", false),
                     downloadUrl =
                         if (item.isNull("download_url")) {
                             null
@@ -376,6 +397,7 @@ object Updater {
                         put("body", release.body ?: JSONObject.NULL)
                         put("published_at", release.publishedAt)
                         put("html_url", release.htmlUrl)
+                        put("prerelease", release.prerelease)
                         put("download_url", release.downloadUrl ?: JSONObject.NULL)
                     },
                 )
