@@ -9,6 +9,7 @@
 package moe.rukamori.archivetune.wear
 
 import android.content.Context
+import android.util.Log
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.CancellationException
@@ -40,6 +41,7 @@ class WearMessagingClient(
                     .nodes
             val node = nodes.firstOrNull { it.isNearby } ?: nodes.firstOrNull()
             if (node == null) {
+                Log.w(TAG, "No reachable node advertises $PHONE_CAPABILITY")
                 false
             } else {
                 messageClient.sendMessage(node.id, path, payload).await()
@@ -48,6 +50,7 @@ class WearMessagingClient(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            Log.w(TAG, "Sending $path failed", e)
             false
         }
 
@@ -57,6 +60,8 @@ class WearMessagingClient(
     ): Boolean = send(path, text.toByteArray(Charsets.UTF_8))
 
     companion object {
+        private const val TAG = "WearMessaging"
+
         // Declared by the phone app in app/src/gms/res/values/wear.xml.
         const val PHONE_CAPABILITY = "archivetune_phone_playback"
 
