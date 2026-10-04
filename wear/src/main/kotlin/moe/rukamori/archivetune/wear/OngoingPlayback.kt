@@ -73,7 +73,7 @@ object OngoingPlayback {
         val builder =
             NotificationCompat
                 .Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.music_note)
+                .setSmallIcon(R.drawable.logo)
                 .setContentTitle(title)
                 .setContentText(artist)
                 .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
@@ -84,7 +84,7 @@ object OngoingPlayback {
                 .addAction(R.drawable.play, context.getString(R.string.play_pause), togglePlay)
         OngoingActivity
             .Builder(context, NOTIFICATION_ID, builder)
-            .setStaticIcon(R.drawable.music_note)
+            .setStaticIcon(R.drawable.logo)
             .setTouchIntent(openApp)
             .setStatus(Status.Builder().addTemplate(title).build())
             .build()
