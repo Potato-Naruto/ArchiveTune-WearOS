@@ -365,7 +365,7 @@ class MediaLibrarySessionCallback
                 if (from >= items.size) return@future LibraryResult.ofItemList(emptyList(), params)
                 val to = min(from + safePageSize, items.size)
 
-                LibraryResult.ofItemList(items.subList(from, to), params)
+                LibraryResult.ofItemList(items.subList(from, to).map { it.withBrowsableFlags() }, params)
             }
 
         override fun onGetChildren(
@@ -2071,6 +2071,25 @@ class MediaLibrarySessionCallback
                 .distinct()
                 .toList()
         }
+
+        /**
+         * Online and cached-only songs come from the general `toMediaItem()` mappers, which leave
+         * `isBrowsable` unset; `LibraryResult.ofItemList` throws on any such item, failing the whole
+         * search for every browser.
+         */
+        private fun MediaItem.withBrowsableFlags(): MediaItem =
+            if (mediaMetadata.isBrowsable != null) {
+                this
+            } else {
+                buildUpon()
+                    .setMediaMetadata(
+                        mediaMetadata
+                            .buildUpon()
+                            .setIsBrowsable(false)
+                            .setIsPlayable(true)
+                            .build(),
+                    ).build()
+            }
 
         private fun interleaveMediaItems(
             first: List<MediaItem>,

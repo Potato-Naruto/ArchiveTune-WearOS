@@ -82,6 +82,9 @@ dependencies {
     implementation(libs.activity)
     implementation(libs.wear.compose.material3)
     implementation(libs.wear.compose.foundation)
+    implementation(libs.wear.compose.navigation)
+    implementation(libs.viewmodel.compose)
+    implementation(libs.lifecycle.runtime.compose)
     implementation(libs.play.services.wearable)
     implementation(libs.coroutines.play.services)
 }

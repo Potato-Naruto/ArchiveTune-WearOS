@@ -15,36 +15,32 @@ import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 
-/** Sends playback commands to the phone app over the Wearable Data Layer. */
+/** Sends requests to the phone app over the Wearable Data Layer. */
 class WearMessagingClient(
     context: Context,
 ) {
     private val appContext = context.applicationContext
     private val capabilityClient by lazy { Wearable.getCapabilityClient(appContext) }
+    private val nodeClient by lazy { Wearable.getNodeClient(appContext) }
     private val messageClient by lazy { Wearable.getMessageClient(appContext) }
 
     /**
-     * Sends [path] with [payload] to a phone advertising [PHONE_CAPABILITY].
+     * Sends [path] with [payload] to the phone.
      *
-     * @return false when no such phone is reachable or the send failed. True only means the message
-     * was handed to the phone, not that playback changed.
+     * @return false when no phone is connected or the send failed. True only means the message
+     * was handed over, not that the phone app acted on it.
      */
     suspend fun send(
         path: String,
         payload: ByteArray = EMPTY_PAYLOAD,
     ): Boolean =
         try {
-            val nodes =
-                capabilityClient
-                    .getCapability(PHONE_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
-                    .await()
-                    .nodes
-            val node = nodes.firstOrNull { it.isNearby } ?: nodes.firstOrNull()
-            if (node == null) {
-                Log.w(TAG, "No reachable node advertises $PHONE_CAPABILITY")
+            val nodeId = phoneNodeId()
+            if (nodeId == null) {
+                Log.w(TAG, "No connected phone to send $path to")
                 false
             } else {
-                messageClient.sendMessage(node.id, path, payload).await()
+                messageClient.sendMessage(nodeId, path, payload).await()
                 true
             }
         } catch (e: CancellationException) {
@@ -59,19 +55,29 @@ class WearMessagingClient(
         text: String,
     ): Boolean = send(path, text.toByteArray(Charsets.UTF_8))
 
-    companion object {
-        private const val TAG = "WearMessaging"
+    /**
+     * Prefers a phone advertising [WearProtocol.PHONE_CAPABILITY]. Capabilities sync separately
+     * from the connection itself and can lag behind an install — or never arrive, as between two
+     * emulators whose Play services are signed differently — so any connected node is the
+     * fallback. A message to a node without the phone app is simply not delivered.
+     */
+    private suspend fun phoneNodeId(): String? {
+        val capable =
+            capabilityClient
+                .getCapability(WearProtocol.PHONE_CAPABILITY, CapabilityClient.FILTER_REACHABLE)
+                .await()
+                .nodes
+        val node =
+            capable.firstOrNull { it.isNearby }
+                ?: capable.firstOrNull()
+                ?: nodeClient.connectedNodes.await().let { nodes ->
+                    nodes.firstOrNull { it.isNearby } ?: nodes.firstOrNull()
+                }
+        return node?.id
+    }
 
-        // Declared by the phone app in app/src/gms/res/values/wear.xml.
-        const val PHONE_CAPABILITY = "archivetune_phone_playback"
-
-        // Mirrored in the phone app's WearCommandListenerService — the two APKs share no code module.
-        const val PATH_PLAY = "/play"
-        const val PATH_PAUSE = "/pause"
-        const val PATH_SKIP_NEXT = "/skip_next"
-        const val PATH_SKIP_PREV = "/skip_prev"
-        const val PATH_SEARCH_VOICE = "/search_voice"
-
-        private val EMPTY_PAYLOAD = ByteArray(0)
+    private companion object {
+        const val TAG = "WearMessaging"
+        val EMPTY_PAYLOAD = ByteArray(0)
     }
 }

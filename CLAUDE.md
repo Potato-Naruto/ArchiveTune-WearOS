@@ -41,6 +41,7 @@ into `dev` only after the device QA in [docs/claude/RELEASES.md](docs/claude/REL
 | [docs/lyrics.md](docs/lyrics.md) | The three renderers, the word sweep, which surface uses which |
 | [docs/sponsorblock.md](docs/sponsorblock.md) | Segment lookup and skipping |
 | [docs/tv.md](docs/tv.md) | Android TV / Fire TV: detection, focus, what is known to be missing |
+| [docs/wear.md](docs/wear.md) | The Wear OS remote: the message protocol mirrored in both APKs, the phone-side bridge, known gaps |
 | [docs/fork-divergence.md](docs/fork-divergence.md) | What 4nx3b's fork has that we do not and the reverse, by tree comparison rather than commit count |
 | [docs/source-logins.md](docs/source-logins.md) | The four WebView sign-in screens: what each captures, why nothing saves unverified, the Qobuz app-secret search |
 | [docs/instance-racing.md](docs/instance-racing.md) | Tidal public instances: where they come from, how the resolver races them, health and cooldowns |
