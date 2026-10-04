@@ -109,6 +109,7 @@ fun SettingsScreen(
     viewModel: RemoteViewModel,
     onOpenThemes: () -> Unit,
     onOpenVolume: () -> Unit,
+    onOpenUpdates: () -> Unit,
 ) {
     val theme by viewModel.theme.collectAsStateWithLifecycle()
     val artDim by viewModel.artDim.collectAsStateWithLifecycle()
@@ -189,6 +190,18 @@ fun SettingsScreen(
                     icon = { Icon(painterResource(R.drawable.volume_up), contentDescription = null) },
                 ) {
                     Text(stringResource(R.string.volume))
+                }
+            }
+
+            item { ListHeader { Text(stringResource(R.string.updates)) } }
+            item {
+                Button(
+                    onClick = onOpenUpdates,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.filledTonalButtonColors(),
+                    icon = { Icon(painterResource(R.drawable.sync), contentDescription = null) },
+                ) {
+                    Text(stringResource(R.string.updates))
                 }
             }
         }
