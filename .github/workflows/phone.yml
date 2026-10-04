@@ -1,0 +1,108 @@
+name: Phone build
+
+# Builds the phone app (gms mobile universal) signed with the release keystore, so it shares a
+# signing certificate with the :wear APK; the Wearable Data Layer will not route between the two
+# otherwise. Run on demand; give `release_tag` to attach the APK to that release as
+# ArchiveTune-phone-gms-universal-release.apk.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing release tag to attach the signed APK to (leave empty to only upload an artifact)'
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Verify signing secrets
+        shell: bash
+        env:
+          KEYSTORE: ${{ secrets.KEYSTORE }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for var in KEYSTORE KEY_ALIAS KEYSTORE_PASSWORD KEY_PASSWORD; do
+            if [ -z "${!var:-}" ]; then
+              echo "::error::Missing required secret $var. The phone build must not fall back to a debug key."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-cleanup: on-success
+
+      - name: Restore release keystore
+        shell: bash
+        env:
+          KEYSTORE: ${{ secrets.KEYSTORE }}
+        run: |
+          set -euo pipefail
+          # app/build.gradle.kts and wear/build.gradle.kts both read this path; it is untracked.
+          mkdir -p app/keystore
+          printf '%s' "$KEYSTORE" | base64 -d > app/keystore/release.keystore
+
+      - name: Build and sign
+        shell: bash
+        env:
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleGmsMobileUniversalRelease --no-daemon
+
+      - name: Verify the APK carries the release certificate
+        shell: bash
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          APK="$(find app/build/outputs/apk -path '*/release/*.apk' | head -n 1)"
+          [ -n "$APK" ] || { echo "::error::no release APK found"; exit 1; }
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
+          expected="$(keytool -list -keystore app/keystore/release.keystore -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" \
+            | sed -n 's/.*SHA-256): *//p' | tr -d ':' | tr 'A-F' 'a-f' | head -n 1)"
+          actual="$("$BT/apksigner" verify --print-certs "$APK" | sed -n 's/.*certificate SHA-256 digest: *//p' | head -n 1)"
+          echo "apk=$APK expected=$expected actual=$actual"
+          [ -n "$expected" ] && [ "$expected" = "$actual" ]
+          mkdir -p out
+          cp "$APK" out/ArchiveTune-phone-gms-universal-release.apk
+
+      - name: Remove keystore
+        if: always()
+        run: rm -rf app/keystore
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: ArchiveTune-phone-gms-universal-release
+          path: out/ArchiveTune-phone-gms-universal-release.apk
+          retention-days: 14
+
+      - name: Attach to release
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.release_tag }}" out/ArchiveTune-phone-gms-universal-release.apk --clobber
