@@ -113,7 +113,25 @@ internal object WearBridge {
 
                 WearProtocol.PATH_SKIP_PREV -> browser.seekToPrevious()
 
+                // Sent by the watch's notification action, which has no player state to choose
+                // between play and pause with.
+                WearProtocol.PATH_TOGGLE_PLAY -> {
+                    if (browser.playWhenReady && browser.playbackState != Player.STATE_ENDED) {
+                        browser.pause()
+                    } else {
+                        if (browser.playbackState == Player.STATE_IDLE) browser.prepare()
+                        browser.play()
+                    }
+                }
+
                 WearProtocol.PATH_TOGGLE_SHUFFLE -> browser.shuffleModeEnabled = !browser.shuffleModeEnabled
+
+                WearProtocol.PATH_REPEAT -> {
+                    when (val mode = text.toIntOrNull()) {
+                        Player.REPEAT_MODE_OFF, Player.REPEAT_MODE_ONE, Player.REPEAT_MODE_ALL ->
+                            browser.repeatMode = mode
+                    }
+                }
 
                 WearProtocol.PATH_VOLUME -> {
                     text.toIntOrNull()?.let { setVolume(appContext, it) }
@@ -309,6 +327,7 @@ internal object WearBridge {
                 WearProtocol.KEY_PLAY_WHEN_READY,
                 browser.playWhenReady && browser.playbackState != Player.STATE_ENDED,
             ).put(WearProtocol.KEY_SHUFFLE, browser.shuffleModeEnabled)
+            .put(WearProtocol.KEY_REPEAT, browser.repeatMode)
             .put(WearProtocol.KEY_POSITION_MS, browser.currentPosition)
             .put(WearProtocol.KEY_DURATION_MS, browser.duration.takeIf { it != C.TIME_UNSET } ?: 0L)
             .put(WearProtocol.KEY_VOLUME, audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0)

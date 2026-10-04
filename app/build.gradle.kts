@@ -133,6 +133,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+        resourceConfigurations += listOf("en")
 
         val lastfmApiKey =
             localProperties.getProperty("LASTFM_API_KEY")
@@ -347,6 +348,8 @@ android {
         release {
             if (hasReleaseSigningConfig) {
                 signingConfig = signingConfigs.getByName("release")
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
             }
             isMinifyEnabled = true
             isShrinkResources = true
@@ -456,6 +459,10 @@ android {
             excludes += "META-INF/build.archives"
             excludes += "META-INF/com.android.tools/**"
             excludes += "META-INF/proguard/**"
+            excludes += "META-INF/licenses/**"
+            excludes += "**/LICENSE*.txt"
+            excludes += "**/NOTICE*.txt"
+            excludes += "**/README*.txt"
         }
     }
 

@@ -37,6 +37,7 @@ data class PlayerState(
     val playing: Boolean = false,
     val playWhenReady: Boolean = false,
     val shuffle: Boolean = false,
+    val repeatMode: Int = WearProtocol.REPEAT_OFF,
     val positionMs: Long = 0,
     val durationMs: Long = 0,
     val volume: Int = 0,
@@ -103,6 +104,18 @@ class RemoteViewModel(
     private val _theme = MutableStateFlow(WearTheme.fromKey(preferences.getString(KEY_THEME, null)))
     val theme: StateFlow<WearTheme> = _theme.asStateFlow()
 
+    // Null until the user moves the slider: until then each theme uses its own darkness.
+    private val _artDim = MutableStateFlow(preferences.getFloat(KEY_ART_DIM, -1f).takeIf { it >= 0f })
+    val artDim: StateFlow<Float?> = _artDim.asStateFlow()
+
+    private val _keepScreenOn = MutableStateFlow(preferences.getBoolean(KEY_KEEP_SCREEN_ON, false))
+    val keepScreenOn: StateFlow<Boolean> = _keepScreenOn.asStateFlow()
+
+    private val _syncOnOpen = MutableStateFlow(preferences.getBoolean(KEY_SYNC_ON_OPEN, false))
+    val syncOnOpen: StateFlow<Boolean> = _syncOnOpen.asStateFlow()
+
+    private var syncedThisLaunch = false
+
     // Bumped whenever something starts playing from a list, so the home pager returns to the player.
     private val _showPlayer = MutableStateFlow(0)
     val showPlayer: StateFlow<Int> = _showPlayer.asStateFlow()
@@ -117,6 +130,11 @@ class RemoteViewModel(
     /** Called while the app is visible: the phone only pushes state to watches that keep asking. */
     fun start() {
         Wearable.getMessageClient(getApplication<Application>()).addListener(this)
+        OngoingPlayback.hide(getApplication())
+        if (_syncOnOpen.value && !syncedThisLaunch) {
+            syncedThisLaunch = true
+            syncPlaylists()
+        }
         heartbeat?.cancel()
         heartbeat =
             viewModelScope.launch {
@@ -128,6 +146,8 @@ class RemoteViewModel(
     }
 
     fun stop() {
+        val state = _player.value
+        if (state.hasItem) OngoingPlayback.show(getApplication(), state.title, state.artist)
         heartbeat?.cancel()
         Wearable.getMessageClient(getApplication<Application>()).removeListener(this)
     }
@@ -145,6 +165,18 @@ class RemoteViewModel(
     fun toggleShuffle() {
         _player.update { it.copy(shuffle = !it.shuffle) }
         send(WearProtocol.PATH_TOGGLE_SHUFFLE)
+    }
+
+    /** Off, then the whole queue, then the current song, then off again. */
+    fun cycleRepeat() {
+        val next =
+            when (_player.value.repeatMode) {
+                WearProtocol.REPEAT_OFF -> WearProtocol.REPEAT_ALL
+                WearProtocol.REPEAT_ALL -> WearProtocol.REPEAT_ONE
+                else -> WearProtocol.REPEAT_OFF
+            }
+        _player.update { it.copy(repeatMode = next) }
+        send(WearProtocol.PATH_REPEAT, next.toString())
     }
 
     fun setVolume(volume: Int) {
@@ -223,6 +255,21 @@ class RemoteViewModel(
         preferences.edit().putString(KEY_THEME, theme.key).apply()
     }
 
+    fun setArtDim(dim: Float?) {
+        _artDim.value = dim
+        preferences.edit().putFloat(KEY_ART_DIM, dim ?: -1f).apply()
+    }
+
+    fun setKeepScreenOn(enabled: Boolean) {
+        _keepScreenOn.value = enabled
+        preferences.edit().putBoolean(KEY_KEEP_SCREEN_ON, enabled).apply()
+    }
+
+    fun setSyncOnOpen(enabled: Boolean) {
+        _syncOnOpen.value = enabled
+        preferences.edit().putBoolean(KEY_SYNC_ON_OPEN, enabled).apply()
+    }
+
     override fun onMessageReceived(event: MessageEvent) {
         when (event.path) {
             WearProtocol.PATH_STATE -> {
@@ -239,6 +286,7 @@ class RemoteViewModel(
                         playing = json.optBoolean(WearProtocol.KEY_PLAYING),
                         playWhenReady = json.optBoolean(WearProtocol.KEY_PLAY_WHEN_READY),
                         shuffle = json.optBoolean(WearProtocol.KEY_SHUFFLE),
+                        repeatMode = json.optInt(WearProtocol.KEY_REPEAT),
                         positionMs = json.optLong(WearProtocol.KEY_POSITION_MS),
                         durationMs = json.optLong(WearProtocol.KEY_DURATION_MS),
                         volume =
@@ -338,6 +386,9 @@ class RemoteViewModel(
 
         private const val SYNC_TIMEOUT_MS = 5 * 60_000L
         private const val KEY_THEME = "theme"
+        private const val KEY_ART_DIM = "artDim"
+        private const val KEY_KEEP_SCREEN_ON = "keepScreenOn"
+        private const val KEY_SYNC_ON_OPEN = "syncOnOpen"
         private const val HEARTBEAT_MS = 15_000L
         private const val VOLUME_SETTLE_MS = 1_500L
     }

@@ -108,6 +108,7 @@ carApp = "1.7.0"
 # and the Wear Compose toolkit the watch screen is drawn with.
 playServicesWearable = "20.0.1"
 wearCompose = "1.7.0"
+wearOngoing = "1.1.0"
 
 
 [libraries]
@@ -166,6 +167,8 @@ play-services-wearable = { module = "com.google.android.gms:play-services-wearab
 wear-compose-material3 = { module = "androidx.wear.compose:compose-material3", version.ref = "wearCompose" }
 wear-compose-foundation = { module = "androidx.wear.compose:compose-foundation", version.ref = "wearCompose" }
 wear-compose-navigation = { module = "androidx.wear.compose:compose-navigation", version.ref = "wearCompose" }
+# Ongoing Activity: what puts the playing track on the watch face (and Samsung's Now Bar).
+wear-ongoing = { module = "androidx.wear:wear-ongoing", version.ref = "wearOngoing" }
 
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }

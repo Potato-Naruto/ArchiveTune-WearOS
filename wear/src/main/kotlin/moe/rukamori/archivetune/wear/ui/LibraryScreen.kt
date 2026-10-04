@@ -9,7 +9,7 @@
 package moe.rukamori.archivetune.wear.ui
 
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,15 +22,14 @@ import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ButtonDefaults
-import androidx.wear.compose.material3.CircularProgressIndicator
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
+import moe.rukamori.archivetune.wear.Decor
 import moe.rukamori.archivetune.wear.MediaEntry
 import moe.rukamori.archivetune.wear.R
 import moe.rukamori.archivetune.wear.RemoteViewModel
-import moe.rukamori.archivetune.wear.SyncState
 
 // The top of the phone's browse tree (MusicService.ROOT).
 private const val ROOT_ID = "root"
@@ -39,12 +38,12 @@ private const val PLAYLISTS_ID = RemoteViewModel.PLAYLISTS_ID
 @Composable
 fun LibraryScreen(
     viewModel: RemoteViewModel,
-    onOpenThemes: () -> Unit,
+    onOpenSettings: () -> Unit,
     onOpenSearch: (String) -> Unit,
     onBrowse: (MediaEntry) -> Unit,
 ) {
     val browse by viewModel.browse.collectAsStateWithLifecycle()
-    val sync by viewModel.sync.collectAsStateWithLifecycle()
+    val theme by viewModel.theme.collectAsStateWithLifecycle()
     val search = rememberSpeechInput(onResult = onOpenSearch)
     val listState = rememberScalingLazyListState()
     val browseAllTitle = stringResource(R.string.browse_all)
@@ -52,6 +51,9 @@ fun LibraryScreen(
 
     ScreenScaffold(scrollState = listState) { contentPadding ->
         ScalingLazyColumn(state = listState, contentPadding = contentPadding) {
+            if (theme.decor != Decor.NONE) {
+                item { ThemeBanner(theme.decor, Modifier.fillMaxWidth().height(56.dp)) }
+            }
             item { ListHeader { Text(stringResource(R.string.library)) } }
             item {
                 Button(
@@ -63,30 +65,6 @@ fun LibraryScreen(
                 }
             }
             item { ListHeader { Text(stringResource(R.string.playlists)) } }
-            item {
-                Button(
-                    onClick = viewModel::syncPlaylists,
-                    enabled = sync != SyncState.Syncing,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(),
-                    icon = {
-                        if (sync == SyncState.Syncing) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                        } else {
-                            Icon(painterResource(R.drawable.sync), contentDescription = null)
-                        }
-                    },
-                    secondaryLabel =
-                        when (val state = sync) {
-                            SyncState.Idle -> null
-                            SyncState.Syncing -> ({ Text(stringResource(R.string.syncing)) })
-                            SyncState.Failed -> ({ Text(stringResource(R.string.sync_failed)) })
-                            is SyncState.Done -> ({ Text(stringResource(R.string.sync_done, state.playlists)) })
-                        },
-                ) {
-                    Text(stringResource(R.string.sync_playlists))
-                }
-            }
             mediaEntries(
                 state = browse[PLAYLISTS_ID],
                 onRetry = { viewModel.loadChildren(PLAYLISTS_ID, force = true) },
@@ -106,12 +84,12 @@ fun LibraryScreen(
             }
             item {
                 Button(
-                    onClick = onOpenThemes,
+                    onClick = onOpenSettings,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.filledTonalButtonColors(),
-                    icon = { Icon(painterResource(R.drawable.palette), contentDescription = null) },
+                    icon = { Icon(painterResource(R.drawable.settings), contentDescription = null) },
                 ) {
-                    Text(stringResource(R.string.theme))
+                    Text(stringResource(R.string.settings))
                 }
             }
         }

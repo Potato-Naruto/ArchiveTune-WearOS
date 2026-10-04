@@ -48,6 +48,8 @@ android {
         release {
             if (hasReleaseSigningConfig) {
                 signingConfig = signingConfigs.getByName("release")
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
             }
             isMinifyEnabled = true
             isShrinkResources = true
@@ -83,8 +85,15 @@ dependencies {
     implementation(libs.wear.compose.material3)
     implementation(libs.wear.compose.foundation)
     implementation(libs.wear.compose.navigation)
+    implementation(libs.wear.ongoing)
     implementation(libs.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.play.services.wearable)
     implementation(libs.coroutines.play.services)
+
+    constraints {
+        // play-services-basement resolves Fragment 1.1.0, which predates the ActivityResult APIs
+        // MainActivity uses and fails lintVitalRelease.
+        implementation("androidx.fragment:fragment:1.8.9")
+    }
 }

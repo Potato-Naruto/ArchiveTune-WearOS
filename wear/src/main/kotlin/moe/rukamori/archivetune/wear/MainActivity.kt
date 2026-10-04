@@ -8,12 +8,21 @@
 
 package moe.rukamori.archivetune.wear
 
+import android.Manifest
+import android.app.SearchManager
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
@@ -24,16 +33,38 @@ import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import moe.rukamori.archivetune.wear.ui.BrowseScreen
 import moe.rukamori.archivetune.wear.ui.HomeScreen
 import moe.rukamori.archivetune.wear.ui.SearchScreen
+import moe.rukamori.archivetune.wear.ui.SettingsScreen
 import moe.rukamori.archivetune.wear.ui.ThemeScreen
 import moe.rukamori.archivetune.wear.ui.VolumeScreen
 
 class MainActivity : ComponentActivity() {
     private val viewModel: RemoteViewModel by viewModels()
 
+    // Only asked so the track can stay on the watch face after the app is left; the app works
+    // the same without it.
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) {
+            playFromSearch(intent)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
         setContent {
             val theme by viewModel.theme.collectAsStateWithLifecycle()
+            val keepScreenOn by viewModel.keepScreenOn.collectAsStateWithLifecycle()
+            LaunchedEffect(keepScreenOn) {
+                if (keepScreenOn) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
             ArchiveTuneWearTheme(theme) {
                 AppScaffold {
                     val navController = rememberSwipeDismissableNavController()
@@ -42,8 +73,7 @@ class MainActivity : ComponentActivity() {
                         composable(ROUTE_HOME) {
                             HomeScreen(
                                 viewModel = viewModel,
-                                onOpenVolume = { navController.navigate(ROUTE_VOLUME) },
-                                onOpenThemes = { navController.navigate(ROUTE_THEMES) },
+                                onOpenSettings = { navController.navigate(ROUTE_SETTINGS) },
                                 onOpenSearch = { query -> navController.navigate("search/${Uri.encode(query)}") },
                                 onBrowse = { entry -> navController.navigate(browseRoute(entry)) },
                             )
@@ -75,12 +105,34 @@ class MainActivity : ComponentActivity() {
                                 onPlayed = { backToPlayer() },
                             )
                         }
+                        composable(ROUTE_SETTINGS) {
+                            SettingsScreen(
+                                viewModel = viewModel,
+                                onOpenThemes = { navController.navigate(ROUTE_THEMES) },
+                                onOpenVolume = { navController.navigate(ROUTE_VOLUME) },
+                            )
+                        }
                         composable(ROUTE_VOLUME) { VolumeScreen(viewModel) }
                         composable(ROUTE_THEMES) { ThemeScreen(viewModel) }
                     }
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        playFromSearch(intent)
+    }
+
+    /**
+     * "Play … on ArchiveTune" from a voice assistant arrives as this intent. The watch plays
+     * nothing itself, so the query goes to the phone like any other search.
+     */
+    private fun playFromSearch(intent: Intent?) {
+        if (intent?.action != ACTION_PLAY_FROM_SEARCH) return
+        val query = intent.getStringExtra(SearchManager.QUERY)?.trim().orEmpty()
+        if (query.isNotEmpty()) viewModel.playSearch(query)
     }
 
     override fun onStart() {
@@ -97,7 +149,9 @@ class MainActivity : ComponentActivity() {
         "browse/${Uri.encode(entry.id)}/${Uri.encode(entry.title.ifEmpty { " " })}/${entry.playable}"
 
     private companion object {
+        const val ACTION_PLAY_FROM_SEARCH = "android.media.action.MEDIA_PLAY_FROM_SEARCH"
         const val ROUTE_HOME = "home"
+        const val ROUTE_SETTINGS = "settings"
         const val ROUTE_VOLUME = "volume"
         const val ROUTE_THEMES = "themes"
     }

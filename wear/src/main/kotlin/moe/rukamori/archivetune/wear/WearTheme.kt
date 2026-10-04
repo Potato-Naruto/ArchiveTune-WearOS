@@ -17,10 +17,14 @@ import androidx.wear.compose.material3.ColorScheme
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.dynamicColorScheme
 
+/** The stickers and backdrop a theme draws; see `ui/ThemeDecor.kt`. */
+enum class Decor { NONE, SAKURA, NARUTO, SASUKE, SUNSET, NIGHT_SKY, COASTAL }
+
 /**
  * @property showArt whether the album cover fills the player's background. AMOLED turns it off:
  * the point of that theme is that unlit pixels stay unlit.
- * @property scrimAlpha how much black sits between the cover and the controls.
+ * @property scrimAlpha how much black sits between the cover and the controls, unless the user has
+ * set their own in Settings.
  */
 enum class WearTheme(
     val key: String,
@@ -28,11 +32,18 @@ enum class WearTheme(
     val showArt: Boolean = true,
     val grayscaleArt: Boolean = false,
     val scrimAlpha: Float = 0.5f,
+    val decor: Decor = Decor.NONE,
 ) {
     MATERIAL("material", R.string.theme_material),
     AMOLED("amoled", R.string.theme_amoled, showArt = false),
     MONOCHROME("monochrome", R.string.theme_monochrome, grayscaleArt = true, scrimAlpha = 0.6f),
     GRAPHITE("graphite", R.string.theme_graphite, grayscaleArt = true, scrimAlpha = 0.72f),
+    SAKURA("sakura", R.string.theme_sakura, decor = Decor.SAKURA),
+    NARUTO("naruto", R.string.theme_naruto, decor = Decor.NARUTO),
+    SASUKE("sasuke", R.string.theme_sasuke, decor = Decor.SASUKE),
+    SUNSET("sunset", R.string.theme_sunset, decor = Decor.SUNSET),
+    NIGHT_SKY("night_sky", R.string.theme_night_sky, decor = Decor.NIGHT_SKY),
+    COASTAL("coastal", R.string.theme_coastal, decor = Decor.COASTAL),
     ;
 
     companion object {
@@ -101,6 +112,64 @@ private val GraphiteColors =
         outlineVariant = Color(0xFF3C4047),
     )
 
+/**
+ * A scheme from three accents and a tinted surface ramp. The themes below differ only in those,
+ * so each is one call instead of another twenty-line literal.
+ */
+private fun accentScheme(
+    primary: Long,
+    onPrimary: Long,
+    primaryContainer: Long,
+    secondary: Long,
+    tertiary: Long,
+    surfaceLow: Long,
+    surface: Long,
+    surfaceHigh: Long,
+    onSurfaceVariant: Long,
+): ColorScheme =
+    ColorScheme(
+        primary = Color(primary),
+        primaryDim = Color(primary).copy(alpha = 0.82f),
+        primaryContainer = Color(primaryContainer),
+        onPrimary = Color(onPrimary),
+        onPrimaryContainer = Color(0xFFFFFFFF),
+        secondary = Color(secondary),
+        secondaryDim = Color(secondary).copy(alpha = 0.82f),
+        secondaryContainer = Color(surfaceHigh),
+        onSecondary = Color(onPrimary),
+        onSecondaryContainer = Color(0xFFF2F2F2),
+        tertiary = Color(tertiary),
+        tertiaryDim = Color(tertiary).copy(alpha = 0.82f),
+        tertiaryContainer = Color(surface),
+        onTertiary = Color(onPrimary),
+        onTertiaryContainer = Color(0xFFF2F2F2),
+        surfaceContainerLow = Color(surfaceLow),
+        surfaceContainer = Color(surface),
+        surfaceContainerHigh = Color(surfaceHigh),
+        onSurface = Color(0xFFFFFFFF),
+        onSurfaceVariant = Color(onSurfaceVariant),
+        outline = Color(onSurfaceVariant).copy(alpha = 0.7f),
+        outlineVariant = Color(surfaceHigh),
+    )
+
+private val SakuraColors =
+    accentScheme(0xFFFFB7C5, 0xFF4A1826, 0xFF7A3049, 0xFFF8C8DC, 0xFFA8D8B0, 0xFF22151B, 0xFF2E1C24, 0xFF3C2530, 0xFFE2B9C6)
+
+private val NarutoColors =
+    accentScheme(0xFFFF8A1F, 0xFF2B1300, 0xFF7A3A00, 0xFF6FA8FF, 0xFFFFD54F, 0xFF1D1610, 0xFF292018, 0xFF362A20, 0xFFE0C4A8)
+
+private val SasukeColors =
+    accentScheme(0xFF9FB4FF, 0xFF0E1440, 0xFF2F3578, 0xFFB388FF, 0xFFFF6B6B, 0xFF121420, 0xFF1A1D2E, 0xFF25293F, 0xFFB7BEDC)
+
+private val SunsetColors =
+    accentScheme(0xFFFFAB76, 0xFF3A1708, 0xFF8A3D2E, 0xFFFF8FB8, 0xFFFFD56B, 0xFF21151A, 0xFF2D1C24, 0xFF3B2530, 0xFFE8C2B4)
+
+private val NightSkyColors =
+    accentScheme(0xFF9FB8FF, 0xFF0A1238, 0xFF27336E, 0xFFC3B1FF, 0xFFFFE9A8, 0xFF0E1324, 0xFF161C33, 0xFF1F2745, 0xFFB4BEDD)
+
+private val CoastalColors =
+    accentScheme(0xFF6FD3C7, 0xFF02302B, 0xFF1F5C63, 0xFF8EC9F0, 0xFFF6D9A8, 0xFF0F1D20, 0xFF16292D, 0xFF1F383D, 0xFFB2D4D3)
+
 @Composable
 fun ArchiveTuneWearTheme(
     theme: WearTheme,
@@ -115,6 +184,12 @@ fun ArchiveTuneWearTheme(
                 WearTheme.AMOLED -> AmoledColors
                 WearTheme.MONOCHROME -> MonochromeColors
                 WearTheme.GRAPHITE -> GraphiteColors
+                WearTheme.SAKURA -> SakuraColors
+                WearTheme.NARUTO -> NarutoColors
+                WearTheme.SASUKE -> SasukeColors
+                WearTheme.SUNSET -> SunsetColors
+                WearTheme.NIGHT_SKY -> NightSkyColors
+                WearTheme.COASTAL -> CoastalColors
             }
         }
     MaterialTheme(colorScheme = colorScheme, content = content)

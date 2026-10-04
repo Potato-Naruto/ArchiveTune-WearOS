@@ -26,8 +26,7 @@ private const val PAGE_LIBRARY = 1
 @Composable
 fun HomeScreen(
     viewModel: RemoteViewModel,
-    onOpenVolume: () -> Unit,
-    onOpenThemes: () -> Unit,
+    onOpenSettings: () -> Unit,
     onOpenSearch: (String) -> Unit,
     onBrowse: (MediaEntry) -> Unit,
 ) {
@@ -41,12 +40,12 @@ fun HomeScreen(
         HorizontalPager(state = pagerState) { page ->
             AnimatedPage(pageIndex = page, pagerState = pagerState) {
                 when (page) {
-                    PAGE_PLAYER -> NowPlayingScreen(viewModel = viewModel, onOpenVolume = onOpenVolume)
+                    PAGE_PLAYER -> NowPlayingScreen(viewModel = viewModel)
 
                     PAGE_LIBRARY ->
                         LibraryScreen(
                             viewModel = viewModel,
-                            onOpenThemes = onOpenThemes,
+                            onOpenSettings = onOpenSettings,
                             onOpenSearch = onOpenSearch,
                             onBrowse = onBrowse,
                         )

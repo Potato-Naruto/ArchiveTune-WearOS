@@ -22,7 +22,9 @@ internal object WearProtocol {
     const val PATH_PAUSE = "/pause"
     const val PATH_SKIP_NEXT = "/skip_next"
     const val PATH_SKIP_PREV = "/skip_prev"
+    const val PATH_TOGGLE_PLAY = "/toggle_play"
     const val PATH_TOGGLE_SHUFFLE = "/toggle_shuffle"
+    const val PATH_REPEAT = "/repeat"
     const val PATH_VOLUME = "/volume"
     const val PATH_SEEK = "/seek"
     const val PATH_SEARCH_VOICE = "/search_voice"
@@ -44,6 +46,7 @@ internal object WearProtocol {
     const val KEY_PLAYING = "playing"
     const val KEY_PLAY_WHEN_READY = "playWhenReady"
     const val KEY_SHUFFLE = "shuffle"
+    const val KEY_REPEAT = "repeat"
     const val KEY_POSITION_MS = "positionMs"
     const val KEY_DURATION_MS = "durationMs"
     const val KEY_VOLUME = "volume"
@@ -57,6 +60,12 @@ internal object WearProtocol {
     const val KEY_PLAYABLE = "playable"
     const val KEY_KIND = "kind"
     const val KEY_COUNT = "count"
+
+    // Values of KEY_REPEAT and the payload of PATH_REPEAT; the same numbers as Media3's
+    // Player.REPEAT_MODE_* so the phone can pass them straight through.
+    const val REPEAT_OFF = 0
+    const val REPEAT_ONE = 1
+    const val REPEAT_ALL = 2
 
     const val KIND_SONG = "song"
     const val KIND_ALBUM = "album"

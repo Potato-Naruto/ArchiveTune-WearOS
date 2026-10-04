@@ -14,7 +14,7 @@ no code module. Change both.
 
 | Direction | Paths |
 |---|---|
-| watch → phone, commands | `/play` `/pause` `/skip_next` `/skip_prev` `/toggle_shuffle` `/volume` `/seek` `/search_voice` `/play_item` |
+| watch → phone, commands | `/play` `/pause` `/toggle_play` `/skip_next` `/skip_prev` `/toggle_shuffle` `/repeat` `/volume` `/seek` `/search_voice` `/play_item` |
 | watch → phone, reads | `/state` `/browse` `/search` `/sync` |
 | phone → watch | `/state` `/art` `/browse_result` `/search_result` `/sync_result` |
 
@@ -51,6 +51,22 @@ the crown or a rotating bezel changes volume (`Modifier.volumeRotary`). A bezel 
 through the `android.hardware.rotaryencoder.lowres` feature and is treated as one volume step per
 detent; a crown's continuous movement is accumulated into steps.
 
+Settings (reached from the library) holds the theme, playlist sync and "sync when opened", the
+cover-darkness slider that overrides each theme's own scrim, and a keep-screen-on switch
+(`FLAG_KEEP_SCREEN_ON`, so it only applies while the app is in front).
+
+Decorated themes draw their stickers, backdrops and chibi figures in `ui/ThemeDecor.kt` from
+shapes; there are no image assets. The figures are original drawings.
+
+When the app is left with a track loaded, `OngoingPlayback` posts an ongoing notification
+registered as a Wear Ongoing Activity — the source for the watch-face chip, the launcher's recents
+row and Samsung's Now Bar. It shows the track from the moment the app was left and times out after
+three hours: nothing on the watch hears from the phone while the app is closed. Its action sends
+`/toggle_play`.
+
+`MainActivity` also accepts `android.media.action.MEDIA_PLAY_FROM_SEARCH` and forwards the query to
+the phone, which is how "play … on ArchiveTune" from a voice assistant on the watch would arrive.
+
 The watch prefers a node advertising the `archivetune_phone_playback` capability
 (`app/src/gms/res/values/wear.xml`) and falls back to any connected node.
 
@@ -62,6 +78,9 @@ The watch prefers a node advertising the `archivetune_phone_playback` capability
   still route, which is what the connected-node fallback relies on.
 - Play from a cold, backgrounded phone app on Android 12+ has not been exercised; every test so far
   had the app process already running.
+- Nothing here has been tried with Gemini or on a Samsung watch. The assistant intent was sent by
+  hand with `am start`, and the ongoing chip was seen on the emulator's stock watch face only. The
+  chip's play/pause action has not been exercised.
 - The bezel path has only been read, not run: the emulator has a crown, not a low-res encoder.
 - Speech recognition itself is untested — on the emulator the query was typed through the speech
   screen's keyboard.

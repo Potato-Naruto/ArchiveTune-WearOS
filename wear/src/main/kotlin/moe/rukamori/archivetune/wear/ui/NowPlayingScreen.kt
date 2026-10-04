@@ -55,18 +55,17 @@ import kotlinx.coroutines.delay
 import moe.rukamori.archivetune.wear.PlayerState
 import moe.rukamori.archivetune.wear.R
 import moe.rukamori.archivetune.wear.RemoteViewModel
+import moe.rukamori.archivetune.wear.WearProtocol
 import moe.rukamori.archivetune.wear.WearTheme
 
 private const val SEEK_STEP_MS = 10_000L
 
 @Composable
-fun NowPlayingScreen(
-    viewModel: RemoteViewModel,
-    onOpenVolume: () -> Unit,
-) {
+fun NowPlayingScreen(viewModel: RemoteViewModel) {
     val state by viewModel.player.collectAsStateWithLifecycle()
     val art by viewModel.art.collectAsStateWithLifecycle()
     val theme by viewModel.theme.collectAsStateWithLifecycle()
+    val artDim by viewModel.artDim.collectAsStateWithLifecycle()
     val phoneReachable by viewModel.phoneReachable.collectAsStateWithLifecycle()
     val voiceSearch = rememberSpeechInput(onResult = viewModel::playSearch)
 
@@ -74,10 +73,15 @@ fun NowPlayingScreen(
         modifier =
             Modifier
                 .fillMaxSize()
-                .volumeRotary(volume = state.volume, onVolumeChange = viewModel::setVolume),
+                .volumeRotary(
+                    volume = state.volume,
+                    maxVolume = state.maxVolume,
+                    onVolumeChange = viewModel::setVolume,
+                ),
         contentAlignment = Alignment.Center,
     ) {
-        ArtBackground(art = art.takeIf { state.hasItem }, theme = theme)
+        ArtBackground(art = art.takeIf { state.hasItem }, theme = theme, dim = artDim ?: theme.scrimAlpha)
+        RimStickers(theme.decor)
 
         if (state.maxVolume > 0) {
             LevelIndicator(
@@ -141,14 +145,31 @@ fun NowPlayingScreen(
             }
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
+                val on = MaterialTheme.colorScheme.primary
+                val off = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                 SmallAction(
                     icon = R.drawable.shuffle,
                     description = R.string.shuffle,
-                    active = state.shuffle,
+                    tint = if (state.shuffle) on else off,
                     onClick = viewModel::toggleShuffle,
                 )
-                SmallAction(icon = R.drawable.mic, description = R.string.voice_search, onClick = voiceSearch)
-                SmallAction(icon = R.drawable.volume_up, description = R.string.volume, onClick = onOpenVolume)
+                SmallAction(
+                    icon = R.drawable.mic,
+                    description = R.string.voice_search,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    onClick = voiceSearch,
+                )
+                SmallAction(
+                    icon = if (state.repeatMode == WearProtocol.REPEAT_ONE) R.drawable.repeat_one else R.drawable.repeat,
+                    description =
+                        when (state.repeatMode) {
+                            WearProtocol.REPEAT_ALL -> R.string.repeat_all
+                            WearProtocol.REPEAT_ONE -> R.string.repeat_one
+                            else -> R.string.repeat_off
+                        },
+                    tint = if (state.repeatMode == WearProtocol.REPEAT_OFF) off else on,
+                    onClick = viewModel::cycleRepeat,
+                )
             }
         }
     }
@@ -158,8 +179,10 @@ fun NowPlayingScreen(
 private fun ArtBackground(
     art: ImageBitmap?,
     theme: WearTheme,
+    dim: Float,
 ) {
     if (!theme.showArt) return
+    theme.decor.backdrop()?.let { Box(Modifier.fillMaxSize().background(it)) }
     Crossfade(targetState = art, animationSpec = tween(450), label = "art") { bitmap ->
         if (bitmap != null) {
             Image(
@@ -183,8 +206,8 @@ private fun ArtBackground(
             .background(
                 Brush.radialGradient(
                     listOf(
-                        Color.Black.copy(alpha = theme.scrimAlpha),
-                        Color.Black.copy(alpha = (theme.scrimAlpha + 0.3f).coerceAtMost(1f)),
+                        Color.Black.copy(alpha = dim),
+                        Color.Black.copy(alpha = (dim + 0.3f).coerceAtMost(1f)),
                     ),
                 ),
             ),
@@ -223,17 +246,13 @@ private fun PlayPauseButton(
 private fun SmallAction(
     icon: Int,
     description: Int,
+    tint: Color,
     onClick: () -> Unit,
-    active: Boolean = false,
 ) {
     IconButton(
         onClick = onClick,
         modifier = Modifier.size(IconButtonDefaults.SmallButtonSize),
-        colors =
-            IconButtonDefaults.iconButtonColors(
-                contentColor =
-                    if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            ),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = tint),
     ) {
         Icon(
             painter = painterResource(icon),

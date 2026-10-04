@@ -8,6 +8,8 @@
 
 package moe.rukamori.archivetune.wear.ui
 
+import android.os.Build
+import android.view.HapticFeedbackConstants
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Canvas
@@ -42,6 +44,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -76,13 +79,16 @@ private const val WAVE_PERIOD_MS = 2_400f
 @Composable
 fun Modifier.volumeRotary(
     volume: Int,
+    maxVolume: Int,
     onVolumeChange: (Int) -> Unit,
 ): Modifier {
     val context = LocalContext.current
+    val view = LocalView.current
     // A bezel detent is one deliberate click, so it is always exactly one step, whatever distance
     // the system reports for it.
     val stepPerEvent = remember { context.packageManager.hasSystemFeature(FEATURE_LOW_RES_ROTARY) }
     val currentVolume by rememberUpdatedState(volume)
+    val currentMax by rememberUpdatedState(maxVolume)
     val currentOnChange by rememberUpdatedState(onVolumeChange)
     var accumulated by remember { mutableFloatStateOf(0f) }
     return this
@@ -95,7 +101,19 @@ fun Modifier.volumeRotary(
                     accumulated += pixels
                     (accumulated / ROTARY_PIXELS_PER_STEP).toInt().also { accumulated -= it * ROTARY_PIXELS_PER_STEP }
                 }
-            if (steps != 0) currentOnChange(currentVolume + steps)
+            val target = (currentVolume + steps).coerceIn(0, currentMax)
+            if (target != currentVolume) {
+                // One tick per change, and none at either end of the range, so the wrist can tell
+                // the volume has stopped moving.
+                view.performHapticFeedback(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        HapticFeedbackConstants.SEGMENT_FREQUENT_TICK
+                    } else {
+                        HapticFeedbackConstants.CLOCK_TICK
+                    },
+                )
+                currentOnChange(target)
+            }
             true
         }.requestFocusOnHierarchyActive()
         .focusable()
