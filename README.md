@@ -18,7 +18,12 @@
     <br />
     <em>It’s high-performance, privacy-focused, and packed with features for people who really care about their experience.</em>
   </p>
-
+  
+<p align="center">
+  <strong>Changes Potato_Naruto made</strong>
+  <br />
+  <em>Added a wearos companion app, can be installed using wearos manager or adb, it has custom themes, search functions, voice integration, offering a seamless experience with your watch :D , basically anything that youd whnt from a companion, let me know if you like it!</em>
+</p>
   <p align="center">
     <a href="https://github.com/vossgraves/ArchiveTune"><b>Official Website</b></a> •
     <a href="#features"><b>Features</b></a> •
