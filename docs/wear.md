@@ -72,7 +72,7 @@ The watch prefers a node advertising the `archivetune_phone_playback` capability
 
 ## Known gaps
 
-- CI neither builds nor publishes `:wear`.
+- `wear.yml` (manual dispatch) builds `:wear` signed with the `KEYSTORE`/`KEY_ALIAS`/`KEYSTORE_PASSWORD`/`KEY_PASSWORD` secrets and can attach it to a release; nothing builds it on push.
 - Emulators: a phone image and a watch image whose Play services are signed with different keys
   (a `dev-keys` preview phone against a `release-keys` watch) never exchange capabilities. Messages
   still route, which is what the connected-node fallback relies on.
