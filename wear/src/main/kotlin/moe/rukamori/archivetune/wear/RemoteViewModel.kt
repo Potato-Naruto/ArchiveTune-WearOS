@@ -53,7 +53,20 @@ data class MediaEntry(
     val subtitle: String,
     val browsable: Boolean,
     val playable: Boolean,
+    val kind: String = WearProtocol.KIND_SONG,
 )
+
+sealed interface SyncState {
+    data object Idle : SyncState
+
+    data object Syncing : SyncState
+
+    data object Failed : SyncState
+
+    data class Done(
+        val playlists: Int,
+    ) : SyncState
+}
 
 sealed interface ListState {
     data object Loading : ListState
@@ -94,7 +107,12 @@ class RemoteViewModel(
     private val _showPlayer = MutableStateFlow(0)
     val showPlayer: StateFlow<Int> = _showPlayer.asStateFlow()
 
+    private val _sync = MutableStateFlow<SyncState>(SyncState.Idle)
+    val sync: StateFlow<SyncState> = _sync.asStateFlow()
+
     private var heartbeat: Job? = null
+    private var syncTimeout: Job? = null
+    private var volumeChangedAtMs = 0L
 
     /** Called while the app is visible: the phone only pushes state to watches that keep asking. */
     fun start() {
@@ -132,8 +150,18 @@ class RemoteViewModel(
     fun setVolume(volume: Int) {
         val clamped = volume.coerceIn(0, _player.value.maxVolume)
         if (clamped == _player.value.volume) return
+        volumeChangedAtMs = SystemClock.elapsedRealtime()
         _player.update { it.copy(volume = clamped) }
         send(WearProtocol.PATH_VOLUME, clamped.toString())
+    }
+
+    fun seekBy(deltaMs: Long) {
+        val now = SystemClock.elapsedRealtime()
+        _player.update {
+            val target = (it.positionAt(now) + deltaMs).coerceIn(0L, it.durationMs.takeIf { d -> d > 0 } ?: Long.MAX_VALUE)
+            it.copy(positionMs = target, receivedAtMs = now)
+        }
+        send(WearProtocol.PATH_SEEK, deltaMs.toString())
     }
 
     /** Replaces the phone's queue with the best matches for [query] and plays it. */
@@ -173,6 +201,23 @@ class RemoteViewModel(
         request(WearProtocol.PATH_SEARCH, query) { _search.update { it + (query to ListState.Failed) } }
     }
 
+    /**
+     * Asks the phone to refresh its playlists from YouTube Music. Everything browsed so far is
+     * dropped when it reports back, so counts and song lists are read again rather than served from
+     * what the watch remembered.
+     */
+    fun syncPlaylists() {
+        if (_sync.value == SyncState.Syncing) return
+        _sync.value = SyncState.Syncing
+        request(WearProtocol.PATH_SYNC, "") { _sync.value = SyncState.Failed }
+        syncTimeout?.cancel()
+        syncTimeout =
+            viewModelScope.launch {
+                delay(SYNC_TIMEOUT_MS)
+                if (_sync.value == SyncState.Syncing) _sync.value = SyncState.Failed
+            }
+    }
+
     fun setTheme(theme: WearTheme) {
         _theme.value = theme
         preferences.edit().putString(KEY_THEME, theme.key).apply()
@@ -182,6 +227,10 @@ class RemoteViewModel(
         when (event.path) {
             WearProtocol.PATH_STATE -> {
                 val json = JSONObject(event.data.toString(Charsets.UTF_8))
+                val now = SystemClock.elapsedRealtime()
+                // While the crown or bezel is turning, replies to earlier steps arrive carrying
+                // volumes the watch has already moved past; taking them would make the bar jump back.
+                val keepLocalVolume = now - volumeChangedAtMs < VOLUME_SETTLE_MS
                 _player.value =
                     PlayerState(
                         hasItem = json.optBoolean(WearProtocol.KEY_HAS_ITEM),
@@ -192,9 +241,10 @@ class RemoteViewModel(
                         shuffle = json.optBoolean(WearProtocol.KEY_SHUFFLE),
                         positionMs = json.optLong(WearProtocol.KEY_POSITION_MS),
                         durationMs = json.optLong(WearProtocol.KEY_DURATION_MS),
-                        volume = json.optInt(WearProtocol.KEY_VOLUME),
+                        volume =
+                            if (keepLocalVolume) _player.value.volume else json.optInt(WearProtocol.KEY_VOLUME),
                         maxVolume = json.optInt(WearProtocol.KEY_MAX_VOLUME),
-                        receivedAtMs = SystemClock.elapsedRealtime(),
+                        receivedAtMs = now,
                     )
             }
 
@@ -210,6 +260,19 @@ class RemoteViewModel(
                             }
                         }
                 }
+            }
+
+            WearProtocol.PATH_SYNC_RESULT -> {
+                val json = JSONObject(event.data.toString(Charsets.UTF_8))
+                syncTimeout?.cancel()
+                _sync.value =
+                    if (json.optBoolean(WearProtocol.KEY_ERROR)) {
+                        SyncState.Failed
+                    } else {
+                        SyncState.Done(json.optInt(WearProtocol.KEY_COUNT))
+                    }
+                _browse.value = emptyMap()
+                loadChildren(PLAYLISTS_ID, force = true)
             }
 
             WearProtocol.PATH_BROWSE_RESULT -> {
@@ -238,6 +301,7 @@ class RemoteViewModel(
                     subtitle = item.optString(WearProtocol.KEY_SUBTITLE),
                     browsable = item.optBoolean(WearProtocol.KEY_BROWSABLE),
                     playable = item.optBoolean(WearProtocol.KEY_PLAYABLE),
+                    kind = item.optString(WearProtocol.KEY_KIND, WearProtocol.KIND_SONG),
                 )
             }
         return id to ListState.Loaded(items)
@@ -268,8 +332,13 @@ class RemoteViewModel(
         stop()
     }
 
-    private companion object {
-        const val KEY_THEME = "theme"
-        const val HEARTBEAT_MS = 15_000L
+    companion object {
+        /** The playlists folder of the phone's browse tree (`MusicService.PLAYLIST`). */
+        const val PLAYLISTS_ID = "playlist"
+
+        private const val SYNC_TIMEOUT_MS = 5 * 60_000L
+        private const val KEY_THEME = "theme"
+        private const val HEARTBEAT_MS = 15_000L
+        private const val VOLUME_SETTLE_MS = 1_500L
     }
 }

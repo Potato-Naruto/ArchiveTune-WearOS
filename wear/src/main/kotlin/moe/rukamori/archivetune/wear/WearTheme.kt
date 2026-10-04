@@ -27,7 +27,7 @@ enum class WearTheme(
     @StringRes val label: Int,
     val showArt: Boolean = true,
     val grayscaleArt: Boolean = false,
-    val scrimAlpha: Float = 0.42f,
+    val scrimAlpha: Float = 0.5f,
 ) {
     MATERIAL("material", R.string.theme_material),
     AMOLED("amoled", R.string.theme_amoled, showArt = false),

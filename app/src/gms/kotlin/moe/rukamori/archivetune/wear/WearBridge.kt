@@ -15,6 +15,7 @@ import android.media.AudioManager
 import android.os.SystemClock
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaBrowser
 import androidx.media3.session.MediaController
@@ -30,11 +31,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import moe.rukamori.archivetune.innertube.YouTube
+import moe.rukamori.archivetune.innertube.models.AlbumItem
+import moe.rukamori.archivetune.innertube.models.PlaylistItem
 import moe.rukamori.archivetune.playback.MusicService
 import org.json.JSONArray
 import org.json.JSONObject
@@ -56,8 +62,11 @@ internal object WearBridge {
     // longer than this is dropped, and with nobody listening the browser is released so it stops
     // holding MusicService bound.
     private const val SUBSCRIBER_TTL_MS = 40_000L
-    private const val BROWSE_PAGE_SIZE = 100
+    // The whole song list of a playlist in one message: about 150 bytes a row, so still well inside the
+    // Data Layer's ~100 KB limit.
+    private const val BROWSE_PAGE_SIZE = 400
     private const val SEARCH_PAGE_SIZE = 30
+    private const val SEARCH_CONTAINER_LIMIT = 6
 
     // Big enough to fill a round watch face, small enough to stay far below the Data Layer's
     // ~100 KB message limit once JPEG-compressed.
@@ -111,6 +120,13 @@ internal object WearBridge {
                     publishState(appContext)
                 }
 
+                WearProtocol.PATH_SEEK -> {
+                    text.toLongOrNull()?.let { delta ->
+                        val duration = browser.duration.takeIf { it != C.TIME_UNSET } ?: Long.MAX_VALUE
+                        browser.seekTo((browser.currentPosition + delta).coerceIn(0L, duration))
+                    }
+                }
+
                 WearProtocol.PATH_SEARCH_VOICE -> {
                     if (text.isNotEmpty()) browser.playAndAwait(searchItem(text))
                 }
@@ -132,12 +148,16 @@ internal object WearBridge {
 
                 WearProtocol.PATH_BROWSE -> {
                     val result = browser.getChildren(text, 0, BROWSE_PAGE_SIZE, null).await()
-                    send(appContext, nodeId, WearProtocol.PATH_BROWSE_RESULT, itemsJson(text, result.value))
+                    send(
+                        appContext,
+                        nodeId,
+                        WearProtocol.PATH_BROWSE_RESULT,
+                        listJson(text, result.value?.map(::entryJson)),
+                    )
                 }
 
                 WearProtocol.PATH_SEARCH -> {
-                    val result = browser.getSearchResult(text, 0, SEARCH_PAGE_SIZE, null).await()
-                    send(appContext, nodeId, WearProtocol.PATH_SEARCH_RESULT, itemsJson(text, result.value))
+                    send(appContext, nodeId, WearProtocol.PATH_SEARCH_RESULT, listJson(text, search(browser, text)))
                 }
             }
         } catch (e: CancellationException) {
@@ -145,8 +165,8 @@ internal object WearBridge {
         } catch (e: Exception) {
             Timber.tag(TAG).w(e, "Wear request %s failed", path)
             when (path) {
-                WearProtocol.PATH_BROWSE -> send(appContext, nodeId, WearProtocol.PATH_BROWSE_RESULT, itemsJson(text, null))
-                WearProtocol.PATH_SEARCH -> send(appContext, nodeId, WearProtocol.PATH_SEARCH_RESULT, itemsJson(text, null))
+                WearProtocol.PATH_BROWSE -> send(appContext, nodeId, WearProtocol.PATH_BROWSE_RESULT, listJson(text, null))
+                WearProtocol.PATH_SEARCH -> send(appContext, nodeId, WearProtocol.PATH_SEARCH_RESULT, listJson(text, null))
             }
         } finally {
             scheduleIdleCheck()
@@ -209,10 +229,12 @@ internal object WearBridge {
         id: String,
         shuffle: Boolean,
     ) {
-        // A local playlist has its own shuffle entry in the browse tree, which also picks a random
+        // Playlists have their own shuffle entry in the browse tree, which also picks a random
         // first song; every other container only gets the player's shuffle mode.
-        val isLocalPlaylist = id.startsWith("${MusicService.PLAYLIST}/") && id.count { it == '/' } == 1
-        if (shuffle && isLocalPlaylist) {
+        val isPlaylist =
+            (id.startsWith("${MusicService.PLAYLIST}/") || id.startsWith("${MusicService.ONLINE_PLAYLIST}/")) &&
+                id.count { it == '/' } == 1
+        if (shuffle && isPlaylist) {
             browser.playAndAwait(MediaItem.Builder().setMediaId("$id/_shuffle").build())
         } else {
             browser.shuffleModeEnabled = shuffle
@@ -295,32 +317,121 @@ internal object WearBridge {
             .toByteArray(Charsets.UTF_8)
     }
 
-    private fun itemsJson(
+    /**
+     * Songs come from the session's own search — the library first, then YouTube Music — which
+     * also primes the cache `onSetMediaItems` plays a bare song id from. Albums and playlists are
+     * looked up alongside and handed over as `online_playlist/` folders, which the same browse
+     * tree already knows how to open, play and shuffle.
+     *
+     * @return null only when nothing could be searched at all.
+     */
+    private suspend fun search(
+        browser: MediaBrowser,
+        query: String,
+    ): List<JSONObject>? =
+        coroutineScope {
+            val albums =
+                async(Dispatchers.IO) {
+                    YouTube
+                        .search(query, YouTube.SearchFilter.FILTER_ALBUM)
+                        .getOrNull()
+                        ?.items
+                        ?.filterIsInstance<AlbumItem>()
+                        ?.take(SEARCH_CONTAINER_LIMIT)
+                        ?.map { album ->
+                            containerJson(
+                                id = "${MusicService.ONLINE_PLAYLIST}/${album.playlistId}",
+                                title = album.title,
+                                subtitle = album.artists?.joinToString { it.name }.orEmpty(),
+                                kind = WearProtocol.KIND_ALBUM,
+                            )
+                        }
+                }
+            val playlists =
+                async(Dispatchers.IO) {
+                    YouTube
+                        .search(query, YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST)
+                        .getOrNull()
+                        ?.items
+                        ?.filterIsInstance<PlaylistItem>()
+                        ?.take(SEARCH_CONTAINER_LIMIT)
+                        ?.map { playlist ->
+                            containerJson(
+                                id = "${MusicService.ONLINE_PLAYLIST}/${playlist.id}",
+                                title = playlist.title,
+                                subtitle = playlist.author?.name.orEmpty(),
+                                kind = WearProtocol.KIND_PLAYLIST,
+                            )
+                        }
+                }
+            val songs =
+                try {
+                    browser
+                        .getSearchResult(query, 0, SEARCH_PAGE_SIZE, null)
+                        .await()
+                        .value
+                        ?.map(::entryJson)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Timber.tag(TAG).w(e, "Session search failed")
+                    null
+                }
+            val foundAlbums = albums.await()
+            val foundPlaylists = playlists.await()
+            if (songs == null && foundAlbums == null && foundPlaylists == null) {
+                null
+            } else {
+                songs.orEmpty() + foundAlbums.orEmpty() + foundPlaylists.orEmpty()
+            }
+        }
+
+    private fun entryJson(item: MediaItem): JSONObject {
+        val metadata = item.mediaMetadata
+        return JSONObject()
+            .put(WearProtocol.KEY_ID, item.mediaId)
+            .put(WearProtocol.KEY_TITLE, metadata.title?.toString().orEmpty())
+            .put(WearProtocol.KEY_SUBTITLE, (metadata.subtitle ?: metadata.artist)?.toString().orEmpty())
+            .put(WearProtocol.KEY_BROWSABLE, metadata.isBrowsable == true)
+            .put(WearProtocol.KEY_PLAYABLE, metadata.isPlayable != false)
+            .put(
+                WearProtocol.KEY_KIND,
+                when (metadata.mediaType) {
+                    MediaMetadata.MEDIA_TYPE_ALBUM -> WearProtocol.KIND_ALBUM
+                    MediaMetadata.MEDIA_TYPE_PLAYLIST -> WearProtocol.KIND_PLAYLIST
+                    else -> WearProtocol.KIND_SONG
+                },
+            )
+    }
+
+    private fun containerJson(
+        id: String,
+        title: String,
+        subtitle: String,
+        kind: String,
+    ): JSONObject =
+        JSONObject()
+            .put(WearProtocol.KEY_ID, id)
+            .put(WearProtocol.KEY_TITLE, title)
+            .put(WearProtocol.KEY_SUBTITLE, subtitle)
+            .put(WearProtocol.KEY_BROWSABLE, true)
+            .put(WearProtocol.KEY_PLAYABLE, true)
+            .put(WearProtocol.KEY_KIND, kind)
+
+    private fun listJson(
         requestId: String,
-        items: List<MediaItem>?,
+        entries: List<JSONObject>?,
     ): ByteArray {
         val array = JSONArray()
-        items
+        entries
             .orEmpty()
             // "_shuffle", "_sort" and "_add_current_song" are Android Auto's action rows; the watch
             // has its own Play and Shuffle buttons.
-            .filterNot { it.mediaId.substringAfterLast('/').startsWith("_") }
-            .forEach { item ->
-                val metadata = item.mediaMetadata
-                array.put(
-                    JSONObject()
-                        .put(WearProtocol.KEY_ID, item.mediaId)
-                        .put(WearProtocol.KEY_TITLE, metadata.title?.toString().orEmpty())
-                        .put(
-                            WearProtocol.KEY_SUBTITLE,
-                            (metadata.subtitle ?: metadata.artist)?.toString().orEmpty(),
-                        ).put(WearProtocol.KEY_BROWSABLE, metadata.isBrowsable == true)
-                        .put(WearProtocol.KEY_PLAYABLE, metadata.isPlayable != false),
-                )
-            }
+            .filterNot { it.getString(WearProtocol.KEY_ID).substringAfterLast('/').startsWith("_") }
+            .forEach { array.put(it) }
         return JSONObject()
             .put(WearProtocol.KEY_ID, requestId)
-            .put(WearProtocol.KEY_ERROR, items == null)
+            .put(WearProtocol.KEY_ERROR, entries == null)
             .put(WearProtocol.KEY_ITEMS, array)
             .toString()
             .toByteArray(Charsets.UTF_8)

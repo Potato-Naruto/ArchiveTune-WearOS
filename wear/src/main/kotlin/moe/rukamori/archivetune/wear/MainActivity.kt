@@ -71,6 +71,7 @@ class MainActivity : ComponentActivity() {
                             SearchScreen(
                                 viewModel = viewModel,
                                 query = entry.arguments?.getString("query").orEmpty(),
+                                onBrowse = { child -> navController.navigate(browseRoute(child)) },
                                 onPlayed = { backToPlayer() },
                             )
                         }

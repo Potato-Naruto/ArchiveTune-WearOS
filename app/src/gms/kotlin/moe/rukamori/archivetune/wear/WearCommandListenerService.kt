@@ -21,6 +21,8 @@ class WearCommandListenerService : WearableListenerService() {
         when (path) {
             in READ_PATHS -> WearBridge.launch(this, messageEvent.sourceNodeId, path, messageEvent.data)
 
+            WearProtocol.PATH_SYNC -> WearPlaylistSyncWorker.enqueue(this, messageEvent.sourceNodeId)
+
             in COMMAND_PATHS -> {
                 // Blocks the listener thread on purpose: Play services keeps this service bound,
                 // and the process alive, only until the callback returns, and starting a search
@@ -54,6 +56,7 @@ class WearCommandListenerService : WearableListenerService() {
                 WearProtocol.PATH_SKIP_PREV,
                 WearProtocol.PATH_TOGGLE_SHUFFLE,
                 WearProtocol.PATH_VOLUME,
+                WearProtocol.PATH_SEEK,
                 WearProtocol.PATH_SEARCH_VOICE,
                 WearProtocol.PATH_PLAY_ITEM,
             )

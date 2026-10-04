@@ -19,6 +19,11 @@
     <string name="library">Library</string>
     <string name="search">Search</string>
     <string name="playlists">Playlists</string>
+    <string name="albums">Albums</string>
+    <string name="sync_playlists">Sync playlists</string>
+    <string name="syncing">Syncing on phone…</string>
+    <string name="sync_done">Updated · %1$d from YouTube Music</string>
+    <string name="sync_failed">Couldn\'t sync</string>
     <string name="more">More</string>
     <string name="browse_all">Browse all</string>
     <string name="theme">Theme</string>

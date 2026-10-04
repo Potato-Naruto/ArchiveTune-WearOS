@@ -67,6 +67,7 @@ fun ScalingLazyListScope.mediaEntries(
     onRetry: () -> Unit,
     @DrawableRes icon: (MediaEntry) -> Int,
     onClick: (MediaEntry) -> Unit,
+    showEmpty: Boolean = true,
 ) {
     when (state) {
         null, ListState.Loading -> {
@@ -91,7 +92,7 @@ fun ScalingLazyListScope.mediaEntries(
         }
 
         is ListState.Loaded -> {
-            if (state.items.isEmpty()) {
+            if (state.items.isEmpty() && showEmpty) {
                 item {
                     Text(
                         text = stringResource(R.string.nothing_here),

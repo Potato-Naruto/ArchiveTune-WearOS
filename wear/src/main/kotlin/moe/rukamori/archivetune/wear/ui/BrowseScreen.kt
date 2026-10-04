@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
+import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.FilledIconButton
@@ -31,9 +32,11 @@ import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
+import moe.rukamori.archivetune.wear.ListState
 import moe.rukamori.archivetune.wear.MediaEntry
 import moe.rukamori.archivetune.wear.R
 import moe.rukamori.archivetune.wear.RemoteViewModel
+import moe.rukamori.archivetune.wear.WearProtocol
 
 /**
  * One folder of the phone's library tree. A folder that can itself be played — a playlist, an
@@ -101,15 +104,34 @@ fun BrowseScreen(
     }
 }
 
+/**
+ * Results for [query] from the phone: songs from the library and from YouTube Music, then the
+ * albums and playlists that matched, each of which opens as a folder with Play and Shuffle.
+ */
 @Composable
 fun SearchScreen(
     viewModel: RemoteViewModel,
     query: String,
+    onBrowse: (MediaEntry) -> Unit,
     onPlayed: () -> Unit,
 ) {
     val search by viewModel.search.collectAsStateWithLifecycle()
     val listState = rememberScalingLazyListState()
     LaunchedEffect(query) { viewModel.loadSearch(query) }
+
+    val state = search[query]
+    val loaded = (state as? ListState.Loaded)?.items
+    val songs = loaded?.filter { !it.browsable }
+    val albums = loaded?.filter { it.browsable && it.kind == WearProtocol.KIND_ALBUM }.orEmpty()
+    val playlists = loaded?.filter { it.browsable && it.kind != WearProtocol.KIND_ALBUM }.orEmpty()
+    val onClick: (MediaEntry) -> Unit = { entry ->
+        if (entry.browsable) {
+            onBrowse(entry)
+        } else {
+            viewModel.playItem(entry.id)
+            onPlayed()
+        }
+    }
 
     ScreenScaffold(scrollState = listState) { contentPadding ->
         ScalingLazyColumn(state = listState, contentPadding = contentPadding) {
@@ -131,14 +153,24 @@ fun SearchScreen(
                 }
             }
             mediaEntries(
-                state = search[query],
+                state = songs?.let { ListState.Loaded(it) } ?: state,
                 onRetry = { viewModel.loadSearch(query, force = true) },
                 icon = { R.drawable.music_note },
-                onClick = { entry ->
-                    viewModel.playItem(entry.id)
-                    onPlayed()
-                },
+                onClick = onClick,
+                showEmpty = albums.isEmpty() && playlists.isEmpty(),
             )
+            if (albums.isNotEmpty()) {
+                item { ListHeader { Text(stringResource(R.string.albums)) } }
+                items(albums, key = { it.id }) { entry ->
+                    MediaEntryButton(entry = entry, icon = R.drawable.library_music, onClick = { onClick(entry) })
+                }
+            }
+            if (playlists.isNotEmpty()) {
+                item { ListHeader { Text(stringResource(R.string.playlists)) } }
+                items(playlists, key = { it.id }) { entry ->
+                    MediaEntryButton(entry = entry, icon = R.drawable.library_music, onClick = { onClick(entry) })
+                }
+            }
         }
     }
 }

@@ -14,7 +14,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +27,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -39,7 +37,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -47,12 +44,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.wear.compose.foundation.requestFocusOnHierarchyActive
-import androidx.wear.compose.material3.CircularProgressIndicator
 import androidx.wear.compose.material3.FilledIconButton
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.IconButton
 import androidx.wear.compose.material3.IconButtonDefaults
+import androidx.wear.compose.material3.LevelIndicator
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import kotlinx.coroutines.delay
@@ -61,8 +57,7 @@ import moe.rukamori.archivetune.wear.R
 import moe.rukamori.archivetune.wear.RemoteViewModel
 import moe.rukamori.archivetune.wear.WearTheme
 
-// How far the crown has to turn for one volume step.
-private const val ROTARY_PIXELS_PER_STEP = 48f
+private const val SEEK_STEP_MS = 10_000L
 
 @Composable
 fun NowPlayingScreen(
@@ -75,25 +70,21 @@ fun NowPlayingScreen(
     val phoneReachable by viewModel.phoneReachable.collectAsStateWithLifecycle()
     val voiceSearch = rememberSpeechInput(onResult = viewModel::playSearch)
 
-    var rotaryAccumulated by remember { mutableFloatStateOf(0f) }
-
     Box(
         modifier =
             Modifier
                 .fillMaxSize()
-                .onRotaryScrollEvent { event ->
-                    rotaryAccumulated += event.verticalScrollPixels
-                    val steps = (rotaryAccumulated / ROTARY_PIXELS_PER_STEP).toInt()
-                    if (steps != 0) {
-                        rotaryAccumulated -= steps * ROTARY_PIXELS_PER_STEP
-                        viewModel.setVolume(state.volume + steps)
-                    }
-                    true
-                }.requestFocusOnHierarchyActive()
-                .focusable(),
+                .volumeRotary(volume = state.volume, onVolumeChange = viewModel::setVolume),
         contentAlignment = Alignment.Center,
     ) {
         ArtBackground(art = art.takeIf { state.hasItem }, theme = theme)
+
+        if (state.maxVolume > 0) {
+            LevelIndicator(
+                value = { state.volume.toFloat() / state.maxVolume },
+                modifier = Modifier.align(Alignment.CenterStart),
+            )
+        }
 
         Column(
             modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
@@ -132,15 +123,21 @@ fun NowPlayingScreen(
             Spacer(Modifier.height(6.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                IconButton(onClick = viewModel::skipPrevious) {
-                    Icon(painterResource(R.drawable.skip_previous), stringResource(R.string.skip_previous))
-                }
+                SkipButton(
+                    icon = R.drawable.skip_previous,
+                    description = R.string.skip_previous,
+                    onClick = viewModel::skipPrevious,
+                    onSeekStep = { viewModel.seekBy(-SEEK_STEP_MS) },
+                )
                 PlayPauseButton(state = state, onClick = viewModel::togglePlay)
-                IconButton(onClick = viewModel::skipNext) {
-                    Icon(painterResource(R.drawable.skip_next), stringResource(R.string.skip_next))
-                }
+                SkipButton(
+                    icon = R.drawable.skip_next,
+                    description = R.string.skip_next,
+                    onClick = viewModel::skipNext,
+                    onSeekStep = { viewModel.seekBy(SEEK_STEP_MS) },
+                )
             }
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -200,25 +197,20 @@ private fun PlayPauseButton(
     onClick: () -> Unit,
 ) {
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
-    LaunchedEffect(state.playing) {
+    LaunchedEffect(state) {
+        now = SystemClock.elapsedRealtime()
         while (state.playing) {
             now = SystemClock.elapsedRealtime()
             delay(500)
         }
     }
-    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(68.dp)) {
-        CircularProgressIndicator(
-            progress = {
-                if (state.durationMs <= 0) {
-                    0f
-                } else {
-                    (state.positionAt(now).toFloat() / state.durationMs).coerceIn(0f, 1f)
-                }
-            },
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(74.dp)) {
+        WavyProgressRing(
+            progress = if (state.durationMs <= 0) 0f else state.positionAt(now).toFloat() / state.durationMs,
+            playing = state.playing,
             modifier = Modifier.fillMaxSize(),
-            strokeWidth = 3.dp,
         )
-        FilledIconButton(onClick = onClick, modifier = Modifier.size(56.dp)) {
+        FilledIconButton(onClick = onClick, modifier = Modifier.size(54.dp)) {
             Icon(
                 painter = painterResource(if (state.playWhenReady) R.drawable.pause else R.drawable.play),
                 contentDescription = stringResource(if (state.playWhenReady) R.string.pause else R.string.play),

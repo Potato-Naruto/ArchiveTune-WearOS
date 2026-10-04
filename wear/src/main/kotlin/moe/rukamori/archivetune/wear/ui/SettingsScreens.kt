@@ -39,7 +39,9 @@ import moe.rukamori.archivetune.wear.WearTheme
 @Composable
 fun VolumeScreen(viewModel: RemoteViewModel) {
     val state by viewModel.player.collectAsStateWithLifecycle()
-    ScreenScaffold {
+    ScreenScaffold(
+        modifier = Modifier.volumeRotary(volume = state.volume, onVolumeChange = viewModel::setVolume),
+    ) {
         if (state.maxVolume <= 0) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             return@ScreenScaffold

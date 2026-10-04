@@ -14,9 +14,9 @@ no code module. Change both.
 
 | Direction | Paths |
 |---|---|
-| watch → phone, commands | `/play` `/pause` `/skip_next` `/skip_prev` `/toggle_shuffle` `/volume` `/search_voice` `/play_item` |
-| watch → phone, reads | `/state` `/browse` `/search` |
-| phone → watch | `/state` `/art` `/browse_result` `/search_result` |
+| watch → phone, commands | `/play` `/pause` `/skip_next` `/skip_prev` `/toggle_shuffle` `/volume` `/seek` `/search_voice` `/play_item` |
+| watch → phone, reads | `/state` `/browse` `/search` `/sync` |
+| phone → watch | `/state` `/art` `/browse_result` `/search_result` `/sync_result` |
 
 ## Phone side (gms source set only)
 
@@ -34,11 +34,22 @@ the same media ids (`onSetMediaItems`); nothing in the bridge reads the database
   released so it stops holding `MusicService` bound.
 - Album art goes as a 320 px JPEG in its own `/art` message, far below the ~100 KB message limit.
 - Volume is the phone's media stream volume.
+- `/sync` enqueues `WearPlaylistSyncWorker`, which runs `SyncUtils` for liked songs, the saved
+  playlists and then every playlist with a remote copy, and answers `/sync_result`. The watch caches
+  what it has browsed for as long as the app is open; that reply is what clears the cache.
+- `/search` returns songs from the session's own search (library first, then YouTube Music) plus
+  albums and playlists looked up directly with `YouTube.search`. Those are handed over as
+  `online_playlist/<id>` folders, which the browse tree already opens, plays and shuffles.
 
 ## Watch side
 
 `RemoteViewModel` owns all state; `ui/` holds the screens (player, library, browse, search results,
 volume, theme). Themes are in `WearTheme.kt`; AMOLED deliberately draws no album art.
+
+On the player, holding Previous or Next for a second seeks 10 s at a time instead of skipping, and
+the crown or a rotating bezel changes volume (`Modifier.volumeRotary`). A bezel reports itself
+through the `android.hardware.rotaryencoder.lowres` feature and is treated as one volume step per
+detent; a crown's continuous movement is accumulated into steps.
 
 The watch prefers a node advertising the `archivetune_phone_playback` capability
 (`app/src/gms/res/values/wear.xml`) and falls back to any connected node.
@@ -51,5 +62,6 @@ The watch prefers a node advertising the `archivetune_phone_playback` capability
   still route, which is what the connected-node fallback relies on.
 - Play from a cold, backgrounded phone app on Android 12+ has not been exercised; every test so far
   had the app process already running.
+- The bezel path has only been read, not run: the emulator has a crown, not a low-res encoder.
 - Speech recognition itself is untested — on the emulator the query was typed through the speech
   screen's keyboard.

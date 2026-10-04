@@ -32,6 +32,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -88,7 +89,10 @@ class MediaLibrarySessionCallback
         val downloadUtil: DownloadUtil,
         val spotifyLibraryRepository: SpotifyLibraryRepository,
     ) : MediaLibrarySession.Callback {
-        private val scope = CoroutineScope(Dispatchers.Main) + Job()
+        // Supervisor, not a plain Job: every callback below is a scope.future, and with a plain Job
+        // the first one to throw cancelled the parent, after which every later browse, search and
+        // play request from any controller came back cancelled until the service restarted.
+        private val scope = CoroutineScope(Dispatchers.Main) + SupervisorJob()
         private var pendingSearchJob: Job? = null
         private val onlineSearchItemCache = ConcurrentHashMap<String, MediaItem>()
         private val spotifyPlaylistItemCache = ConcurrentHashMap<String, List<MediaItem>>()
@@ -619,7 +623,7 @@ class MediaLibrarySessionCallback
                         }
                     }
 
-                LibraryResult.ofItemList(items.paged(page, pageSize), params)
+                LibraryResult.ofItemList(items.paged(page, pageSize).map { it.withBrowsableFlags() }, params)
             }
 
         override fun onGetItem(
@@ -2075,7 +2079,7 @@ class MediaLibrarySessionCallback
         /**
          * Online and cached-only songs come from the general `toMediaItem()` mappers, which leave
          * `isBrowsable` unset; `LibraryResult.ofItemList` throws on any such item, failing the whole
-         * search for every browser.
+         * search or folder listing for every browser.
          */
         private fun MediaItem.withBrowsableFlags(): MediaItem =
             if (mediaMetadata.isBrowsable != null) {

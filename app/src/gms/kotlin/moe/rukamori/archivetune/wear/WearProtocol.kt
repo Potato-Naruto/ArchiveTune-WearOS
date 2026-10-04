@@ -20,16 +20,19 @@ internal object WearProtocol {
     const val PATH_SKIP_PREV = "/skip_prev"
     const val PATH_TOGGLE_SHUFFLE = "/toggle_shuffle"
     const val PATH_VOLUME = "/volume"
+    const val PATH_SEEK = "/seek"
     const val PATH_SEARCH_VOICE = "/search_voice"
     const val PATH_PLAY_ITEM = "/play_item"
     const val PATH_STATE = "/state"
     const val PATH_BROWSE = "/browse"
     const val PATH_SEARCH = "/search"
+    const val PATH_SYNC = "/sync"
 
     // Phone -> watch. PATH_STATE is reused for the reply.
     const val PATH_ART = "/art"
     const val PATH_BROWSE_RESULT = "/browse_result"
     const val PATH_SEARCH_RESULT = "/search_result"
+    const val PATH_SYNC_RESULT = "/sync_result"
 
     const val KEY_TITLE = "title"
     const val KEY_ARTIST = "artist"
@@ -48,4 +51,10 @@ internal object WearProtocol {
     const val KEY_SUBTITLE = "subtitle"
     const val KEY_BROWSABLE = "browsable"
     const val KEY_PLAYABLE = "playable"
+    const val KEY_KIND = "kind"
+    const val KEY_COUNT = "count"
+
+    const val KIND_SONG = "song"
+    const val KIND_ALBUM = "album"
+    const val KIND_PLAYLIST = "playlist"
 }
