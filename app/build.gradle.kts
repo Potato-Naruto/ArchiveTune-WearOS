@@ -551,6 +551,9 @@ dependencies {
     implementation("androidx.media3:media3-ui-compose:${libs.versions.media3.get()}")
     add("gmsImplementation", libs.media3.cast)
     add("gmsImplementation", libs.mediarouter)
+    // Wear OS remote (gms source set only): WearCommandListenerService receives the watch's
+    // Data Layer messages.
+    add("gmsImplementation", libs.play.services.wearable)
     // Drive backup authorization (gms source set only): Identity/AuthorizationClient
     // for com.google.android.gms.auth.api.identity.* in the gms Drive stack.
     add("gmsImplementation", "com.google.android.gms:play-services-auth:22.0.0")

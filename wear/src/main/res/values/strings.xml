@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">ArchiveTune</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="skip_next">Next</string>
+    <string name="skip_previous">Previous</string>
+    <string name="voice_search">Voice search</string>
+    <string name="voice_search_prompt">What do you want to hear?</string>
+    <string name="voice_search_unavailable">Voice search is not available on this watch</string>
+    <string name="phone_unreachable">ArchiveTune on your phone is not reachable</string>
+</resources>

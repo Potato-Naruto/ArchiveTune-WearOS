@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- tools:keep because nothing in code references the array: Play services reads it by name to
+     advertise the capability, and resource shrinking would otherwise strip it from release builds. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@array/android_wear_capabilities">
+    <string-array name="android_wear_capabilities" translatable="false">
+        <item>archivetune_phone_playback</item>
+    </string-array>
+</resources>
