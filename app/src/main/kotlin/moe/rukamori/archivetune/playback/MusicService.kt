@@ -38,8 +38,10 @@ import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Binder
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.PowerManager
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
@@ -5150,14 +5152,23 @@ class MusicService :
         }
     }
 
-    fun playFromVoiceSearch(query: String) {
+    fun playFromVoiceSearch(
+        query: String,
+        extras: Bundle? = null,
+    ) {
         val trimmed = query.trim()
-        if (trimmed.isBlank()) return
         ensureScopesActive()
         scope.launch(SilentHandler) {
+            // Nothing named ("play music on ArchiveTune"): carry on with the loaded queue.
+            val focus = extras?.getString(MediaStore.EXTRA_MEDIA_FOCUS)
+            if (trimmed.isEmpty() && (focus == null || focus == "vnd.android.cursor.item/*") && player.mediaItemCount > 0) {
+                player.prepare()
+                player.play()
+                return@launch
+            }
             val mediaItems =
                 withContext(Dispatchers.IO) {
-                    mediaLibrarySessionCallback.resolveVoiceMediaItems(trimmed)
+                    mediaLibrarySessionCallback.resolveVoiceMediaItems(trimmed, extras)
                 }
             if (mediaItems.isEmpty()) return@launch
             playQueue(ListQueue(items = mediaItems))

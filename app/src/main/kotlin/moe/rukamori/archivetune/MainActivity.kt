@@ -412,6 +412,7 @@ class MainActivity : ComponentActivity() {
     private var pendingIntent: Intent? = null
     private var pendingDeepLinkQueue: Queue? = null
     private var pendingVoiceSearchQuery: String? = null
+    private var pendingVoiceSearchExtras: Bundle? = null
     private var pendingAodModeRequest = false
     private var pendingAodModeJob: Job? = null
     private var aodModeLaunchRequestCount by mutableIntStateOf(0)
@@ -464,8 +465,10 @@ class MainActivity : ComponentActivity() {
     private fun playPendingVoiceSearchIfReady() {
         val query = pendingVoiceSearchQuery ?: return
         val connection = playerConnection ?: return
+        val extras = pendingVoiceSearchExtras
         pendingVoiceSearchQuery = null
-        connection.playFromVoiceSearch(query)
+        pendingVoiceSearchExtras = null
+        connection.playFromVoiceSearch(query, extras)
     }
 
     private fun requestAodMode() {
@@ -3393,11 +3396,11 @@ class MainActivity : ComponentActivity() {
                         ?: intent.getStringExtra("android.intent.extra.TITLE")
                         ?: ""
                 ).trim()
-            if (query.isNotBlank()) {
-                pendingVoiceSearchQuery = query
-                startMusicServiceSafely()
-                playPendingVoiceSearchIfReady()
-            }
+            // A blank query is still a request: "play music on ArchiveTune" names nothing.
+            pendingVoiceSearchQuery = query
+            pendingVoiceSearchExtras = intent.extras
+            startMusicServiceSafely()
+            playPendingVoiceSearchIfReady()
             return
         }
         if (handleExternalAudioIntent(intent)) {

@@ -12,6 +12,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.core.net.toUri
@@ -60,6 +61,7 @@ import moe.rukamori.archivetune.extensions.metadata
 import moe.rukamori.archivetune.extensions.toMediaItem
 import moe.rukamori.archivetune.extensions.toggleRepeatMode
 import moe.rukamori.archivetune.innertube.YouTube
+import moe.rukamori.archivetune.innertube.models.AlbumItem
 import moe.rukamori.archivetune.innertube.models.PlaylistItem
 import moe.rukamori.archivetune.innertube.models.SongItem
 import moe.rukamori.archivetune.innertube.models.filterExplicit
@@ -754,19 +756,16 @@ class MediaLibrarySessionCallback
                 val defaultResult =
                     MediaSession.MediaItemsWithStartPosition(emptyList(), startIndex, startPositionMs)
                 val firstItem = mediaItems.firstOrNull() ?: return@future defaultResult
-                val voiceQuery =
-                    firstItem.requestMetadata.searchQuery
-                        ?.trim()
-                        .orEmpty()
-                if (voiceQuery.isNotBlank()) {
-                    val offlineSongs = searchOfflineSongs(voiceQuery, previewSize = 50)
-                    val existingSongIds =
-                        offlineSongs.items.mapTo(HashSet(offlineSongs.items.size * 2), ::searchSongIdentity)
-                    val onlineSongs =
-                        searchOnlineSongs(voiceQuery, previewSize = 50).filter { onlineItem ->
-                            existingSongIds.add(searchSongIdentity(onlineItem))
-                        }
-                    val searchQueue = interleaveMediaItems(offlineSongs.items, onlineSongs)
+                // A non-null search query marks a voice request; it is blank for "play music on
+                // ArchiveTune", which should carry on with the queue that is already loaded.
+                val voiceQuery = firstItem.requestMetadata.searchQuery?.trim()
+                if (voiceQuery != null && (voiceQuery.isNotEmpty() || firstItem.mediaId.isBlank())) {
+                    val voiceExtras = firstItem.requestMetadata.extras
+                    if (voiceQuery.isEmpty() && voiceExtras?.getString(MediaStore.EXTRA_MEDIA_FOCUS) in VOICE_FOCUS_ANY) {
+                        val current = mediaSession.currentMediaItemsWithStartPosition()
+                        if (current.mediaItems.isNotEmpty()) return@future current
+                    }
+                    val searchQueue = resolveVoiceMediaItems(voiceQuery, voiceExtras)
                     if (searchQueue.isNotEmpty()) {
                         return@future MediaSession.MediaItemsWithStartPosition(
                             searchQueue,
@@ -1002,7 +1001,7 @@ class MediaLibrarySessionCallback
                         if (query.isBlank()) {
                             listOf(item)
                         } else {
-                            val resolved = resolveVoiceMediaItems(query)
+                            val resolved = resolveVoiceMediaItems(query, item.requestMetadata.extras)
                             resolved.ifEmpty { listOf(item) }
                         }
                     }.toMutableList()
@@ -2111,12 +2110,44 @@ class MediaLibrarySessionCallback
             return merged
         }
 
+        /**
+         * Turns a voice request ("play X on ArchiveTune" from Gemini, Assistant or Android Auto)
+         * into a queue. [extras] are the `MediaStore.EXTRA_MEDIA_*` hints the assistant attaches:
+         * when it understood the request as a playlist, album or artist, that is looked up as such
+         * before falling back to a song search. A blank query means "play anything".
+         */
         internal suspend fun resolveVoiceMediaItems(
             query: String,
+            extras: Bundle? = null,
             previewSize: Int = 50,
         ): List<MediaItem> {
             val q = query.trim()
-            if (q.isBlank()) return emptyList()
+            val focused =
+                when (extras?.getString(MediaStore.EXTRA_MEDIA_FOCUS)) {
+                    VOICE_FOCUS_PLAYLIST -> {
+                        voicePlaylistItems(extras.voiceHint(VOICE_EXTRA_PLAYLIST) ?: q)
+                    }
+
+                    MediaStore.Audio.Albums.ENTRY_CONTENT_TYPE -> {
+                        voiceAlbumItems(
+                            album = extras.voiceHint(MediaStore.EXTRA_MEDIA_ALBUM) ?: q,
+                            artist = extras.voiceHint(MediaStore.EXTRA_MEDIA_ARTIST),
+                        )
+                    }
+
+                    MediaStore.Audio.Artists.ENTRY_CONTENT_TYPE -> {
+                        voiceArtistItems(extras.voiceHint(MediaStore.EXTRA_MEDIA_ARTIST) ?: q, previewSize)
+                    }
+
+                    else -> {
+                        emptyList()
+                    }
+                }
+            if (focused.isNotEmpty()) {
+                focused.forEach { onlineSearchItemCache[it.mediaId] = it }
+                return focused
+            }
+            if (q.isBlank()) return voiceAnyItems()
             val offlineSongs = searchOfflineSongs(q, previewSize)
             val existingIds = offlineSongs.items.mapTo(HashSet(offlineSongs.items.size * 2), ::searchSongIdentity)
             val onlineSongs =
@@ -2125,6 +2156,76 @@ class MediaLibrarySessionCallback
                 }
             onlineSongs.forEach { onlineSearchItemCache[it.mediaId] = it }
             return interleaveMediaItems(offlineSongs.items, onlineSongs).take(previewSize)
+        }
+
+        private fun Bundle.voiceHint(key: String): String? = getString(key)?.trim()?.takeIf { it.isNotEmpty() }
+
+        private suspend fun voicePlaylistItems(name: String): List<MediaItem> {
+            if (name.isBlank()) return emptyList()
+            val matches = database.searchPlaylists(name, previewSize = 10).first()
+            val playlist =
+                matches.firstOrNull { it.title.equals(name, ignoreCase = true) }
+                    ?: matches.firstOrNull()
+                    ?: return emptyList()
+            return playlistSongs(playlist.id).map { it.toMediaItem() }
+        }
+
+        private suspend fun voiceAlbumItems(
+            album: String,
+            artist: String?,
+        ): List<MediaItem> {
+            if (album.isBlank()) return emptyList()
+            val matches = database.searchAlbums(album, previewSize = 10).first()
+            val local = matches.firstOrNull { it.title.equals(album, ignoreCase = true) } ?: matches.firstOrNull()
+            local
+                ?.let { database.albumWithSongs(it.id).first() }
+                ?.songs
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { songs -> return songs.map { it.toMediaItem() } }
+
+            val albumItem =
+                YouTube
+                    .search(listOfNotNull(album, artist).joinToString(" "), YouTube.SearchFilter.FILTER_ALBUM)
+                    .getOrNull()
+                    ?.items
+                    .orEmpty()
+                    .filterIsInstance<AlbumItem>()
+                    .firstOrNull() ?: return emptyList()
+            return YouTube
+                .album(albumItem.browseId)
+                .getOrNull()
+                ?.songs
+                .orEmpty()
+                .map { it.toMediaItem() }
+        }
+
+        private suspend fun voiceArtistItems(
+            artist: String,
+            previewSize: Int,
+        ): List<MediaItem> {
+            if (artist.isBlank()) return emptyList()
+            val matches = database.searchArtists(artist, previewSize = 10).first()
+            val local = matches.firstOrNull { it.title.equals(artist, ignoreCase = true) } ?: matches.firstOrNull()
+            val librarySongs =
+                local
+                    ?.let { database.artistSongsByCreateDateAsc(it.id).first() }
+                    .orEmpty()
+                    .shuffled()
+                    .map { it.toMediaItem() }
+            val seen = librarySongs.mapTo(HashSet(), ::searchSongIdentity)
+            val onlineSongs = searchOnlineSongs(artist, previewSize).filter { seen.add(searchSongIdentity(it)) }
+            return (librarySongs + onlineSongs).take(previewSize)
+        }
+
+        /** "Play some music" with nothing named: quick picks, or failing that what was played last. */
+        private suspend fun voiceAnyItems(): List<MediaItem> {
+            val songs =
+                database
+                    .quickPicks()
+                    .first()
+                    .shuffled()
+                    .ifEmpty { database.recentSongs(AUTO_BROWSE_LIMIT).first() }
+            return songs.take(AUTO_BROWSE_LIMIT).map { it.toMediaItem() }
         }
 
         private fun searchSongIdentity(item: MediaItem): String = item.mediaId.removePrefix("${MusicService.SONG}/")
@@ -2153,6 +2254,12 @@ class MediaLibrarySessionCallback
                 "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT"
             private const val EXTRA_CONTENT_STYLE_PLAYABLE_HINT =
                 "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT"
+
+            // MediaStore.Audio.Playlists is deprecated, but assistants still send its content type
+            // and MediaStore.EXTRA_MEDIA_PLAYLIST for "play my … playlist".
+            private const val VOICE_FOCUS_PLAYLIST = "vnd.android.cursor.item/playlist"
+            private const val VOICE_EXTRA_PLAYLIST = "android.intent.extra.playlist"
+            private val VOICE_FOCUS_ANY = setOf(null, "vnd.android.cursor.item/*")
 
             private const val CONTENT_STYLE_LIST_ITEM = 1
             private const val CONTENT_STYLE_GRID_ITEM = 2
