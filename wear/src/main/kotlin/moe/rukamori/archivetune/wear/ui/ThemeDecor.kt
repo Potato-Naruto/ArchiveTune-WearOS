@@ -9,8 +9,12 @@
 package moe.rukamori.archivetune.wear.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -23,9 +27,15 @@ import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
+import androidx.wear.compose.material3.MaterialTheme
+import androidx.wear.compose.material3.Text
 import moe.rukamori.archivetune.wear.Decor
+import moe.rukamori.archivetune.wear.R
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -44,6 +54,7 @@ fun Decor.backdrop(): Brush? =
         Decor.SAKURA -> Brush.verticalGradient(listOf(Color(0xFF3A1A2B), Color(0xFF6B2F4C), Color(0xFF2A1420)))
         Decor.NARUTO -> Brush.verticalGradient(listOf(Color(0xFF16233F), Color(0xFF6A3408), Color(0xFF2B1608)))
         Decor.SASUKE -> Brush.verticalGradient(listOf(Color(0xFF0B0D22), Color(0xFF2A1E55), Color(0xFF12102A)))
+        Decor.SHIKAMARU -> Brush.verticalGradient(listOf(Color(0xFF1F4868), Color(0xFF4F86AC), Color(0xFF2C4727)))
         Decor.SUNSET -> Brush.verticalGradient(listOf(Color(0xFF3B1E54), Color(0xFFB8405E), Color(0xFFE98A4B)))
         Decor.NIGHT_SKY -> Brush.verticalGradient(listOf(Color(0xFF050818), Color(0xFF131A40), Color(0xFF232C5C)))
         Decor.COASTAL -> Brush.verticalGradient(listOf(Color(0xFF0B3340), Color(0xFF1A6E7A), Color(0xFF0D3F48)))
@@ -83,6 +94,30 @@ fun ThemeBanner(
     modifier: Modifier = Modifier,
 ) {
     if (decor == Decor.NONE) return
+    if (decor == Decor.SHIKAMARU) {
+        // His line goes where the other themes start their picture, with the nap underneath it.
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                stringResource(R.string.shikamaru_quote),
+                // The list pins the banner's bottom edge, so padding cannot move this; the offset
+                // drops it clear of the clock drawn over the top of the list.
+                modifier = Modifier.offset(y = 8.dp),
+                style = MaterialTheme.typography.labelMedium,
+                fontStyle = FontStyle.Italic,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            BannerCanvas(decor, modifier)
+        }
+    } else {
+        BannerCanvas(decor, modifier)
+    }
+}
+
+@Composable
+private fun BannerCanvas(
+    decor: Decor,
+    modifier: Modifier,
+) {
     Canvas(modifier) {
         val unit = size.height / 56f
         val middle = Offset(size.width / 2f, size.height / 2f)
@@ -90,6 +125,7 @@ fun ThemeBanner(
             Decor.SAKURA -> chibi(middle, size.height, ChibiLook.Blossom)
             Decor.NARUTO -> chibi(middle, size.height, ChibiLook.Fox)
             Decor.SASUKE -> chibi(middle, size.height, ChibiLook.Storm)
+            Decor.SHIKAMARU -> nappingChibi(middle, size.height)
             Decor.SUNSET -> sun(middle, unit * 20f)
             Decor.NIGHT_SKY -> moon(middle, unit * 18f, Color(0xFFFFE9A8))
             Decor.COASTAL -> shell(middle, unit * 18f)
@@ -124,6 +160,13 @@ private fun DrawScope.drawMotif(
                 0 -> bolt(at, size, Color(0xFF9FB4FF))
                 1 -> sparkle(at, size * 0.8f, Color(0xFFB388FF))
                 else -> throwingStar(at, size, Color(0xFFB8C4D6))
+            }
+
+        Decor.SHIKAMARU ->
+            when (index % 3) {
+                0 -> cloud(at, size, Color(0xE6F4F8FB))
+                1 -> leaf(at, size * 0.8f, index * 40f, Color(0xFF8FBF6A))
+                else -> shogiPiece(at, size * 0.9f)
             }
 
         Decor.SUNSET ->
@@ -333,6 +376,94 @@ private fun DrawScope.shell(
             Offset(at.x + i * size * 0.4f, at.y - size * (0.75f - 0.12f * i * i)),
             size * 0.06f,
         )
+    }
+}
+
+private fun DrawScope.shogiPiece(
+    at: Offset,
+    size: Float,
+) {
+    val tile =
+        Path().apply {
+            moveTo(at.x, at.y - size)
+            lineTo(at.x + size * 0.7f, at.y - size * 0.45f)
+            lineTo(at.x + size * 0.85f, at.y + size)
+            lineTo(at.x - size * 0.85f, at.y + size)
+            lineTo(at.x - size * 0.7f, at.y - size * 0.45f)
+            close()
+        }
+    drawPath(tile, Color(0xFFE9CF9A))
+    drawLine(Color(0xFF6B4A22), Offset(at.x, at.y - size * 0.35f), Offset(at.x, at.y + size * 0.55f), size * 0.16f, StrokeCap.Round)
+    drawLine(Color(0xFF6B4A22), Offset(at.x - size * 0.35f, at.y), Offset(at.x + size * 0.35f, at.y), size * 0.16f, StrokeCap.Round)
+}
+
+/**
+ * The lazy one, flat on his back on the grass watching the clouds: an arm for a pillow, one knee
+ * up, eyes shut, hair tied in a spiky tuft. Drawn across [center] rather than standing on it.
+ */
+private fun DrawScope.nappingChibi(
+    center: Offset,
+    height: Float,
+) {
+    val u = height / 56f
+    val hair = Color(0xFF2B2320)
+    val vest = Color(0xFF6F8F52)
+    val cloth = Color(0xFF3A3F45)
+    val head = Offset(center.x - 13f * u, center.y + 3f * u)
+    val headRadius = 11f * u
+
+    cloud(Offset(center.x + 13f * u, center.y - 11f * u), 6f * u, Color(0xE6F4F8FB))
+
+    drawOval(Color(0xFF3F6B34), Offset(center.x - 36f * u, center.y + 11f * u), Size(72f * u, 16f * u))
+
+    // The arm under his head, then legs and torso, so the head overlaps all three.
+    drawLine(Skin, Offset(center.x, center.y + 9f * u), Offset(center.x - 25f * u, center.y + 11f * u), 4.5f * u, StrokeCap.Round)
+    drawLine(cloth, Offset(center.x + 12f * u, center.y + 12f * u), Offset(center.x + 30f * u, center.y + 13f * u), 5.5f * u, StrokeCap.Round)
+    val bentLeg =
+        Path().apply {
+            moveTo(center.x + 13f * u, center.y + 10f * u)
+            lineTo(center.x + 21f * u, center.y - 1f * u)
+            lineTo(center.x + 27f * u, center.y + 12f * u)
+        }
+    drawPath(bentLeg, cloth, style = Stroke(width = 5.5f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    drawCircle(Skin, 2.6f * u, Offset(center.x + 31f * u, center.y + 12.5f * u))
+    drawCircle(Skin, 2.6f * u, Offset(center.x + 28f * u, center.y + 13f * u))
+    drawRoundRect(vest, Offset(center.x - 6f * u, center.y + 4f * u), Size(22f * u, 11f * u), CornerRadius(5f * u))
+    drawRect(cloth, Offset(center.x + 4f * u, center.y + 4f * u), Size(2f * u, 11f * u))
+
+    rotate(-24f, head) {
+        repeat(5) { i ->
+            val angle = (-118f + i * 14f) * PI.toFloat() / 180f
+            val tip = Offset(head.x + headRadius * 1.75f * cos(angle), head.y + headRadius * 1.75f * sin(angle))
+            val left = Offset(head.x + headRadius * cos(angle - 0.2f), head.y + headRadius * sin(angle - 0.2f))
+            val right = Offset(head.x + headRadius * cos(angle + 0.2f), head.y + headRadius * sin(angle + 0.2f))
+            drawPath(
+                Path().apply {
+                    moveTo(left.x, left.y)
+                    lineTo(tip.x, tip.y)
+                    lineTo(right.x, right.y)
+                    close()
+                },
+                hair,
+            )
+        }
+        drawCircle(hair, headRadius * 1.05f, Offset(head.x, head.y - 1.2f * u))
+        drawCircle(Skin, headRadius, head)
+        // Hair pulled back off the forehead.
+        drawArc(hair, 180f, 180f, true, Offset(head.x - headRadius, head.y - headRadius), Size(headRadius * 2f, headRadius * 1.1f))
+        for (side in listOf(-1f, 1f)) {
+            drawArc(
+                Ink,
+                startAngle = 10f,
+                sweepAngle = 160f,
+                useCenter = false,
+                topLeft = Offset(head.x + side * 4.5f * u - 2f * u, head.y + 0.5f * u),
+                size = Size(4f * u, 2.6f * u),
+                style = Stroke(width = 0.8f * u, cap = StrokeCap.Round),
+            )
+            drawCircle(Blush, 1.9f * u, Offset(head.x + side * 7.5f * u, head.y + 5.5f * u))
+        }
+        drawLine(Ink, Offset(head.x - 1.6f * u, head.y + 6.5f * u), Offset(head.x + 1.6f * u, head.y + 6.2f * u), 0.7f * u, StrokeCap.Round)
     }
 }
 

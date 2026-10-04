@@ -39,6 +39,8 @@
     <string name="theme_sakura">Sakura</string>
     <string name="theme_naruto">Naruto</string>
     <string name="theme_sasuke">Sasuke</string>
+    <string name="theme_shikamaru">Shikamaru</string>
+    <string name="shikamaru_quote">“What a drag…”</string>
     <string name="theme_sunset">Sunset</string>
     <string name="theme_night_sky">Night sky</string>
     <string name="theme_coastal">Coastal</string>

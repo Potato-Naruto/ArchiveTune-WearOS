@@ -18,7 +18,7 @@ import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.dynamicColorScheme
 
 /** The stickers and backdrop a theme draws; see `ui/ThemeDecor.kt`. */
-enum class Decor { NONE, SAKURA, NARUTO, SASUKE, SUNSET, NIGHT_SKY, COASTAL }
+enum class Decor { NONE, SAKURA, NARUTO, SASUKE, SHIKAMARU, SUNSET, NIGHT_SKY, COASTAL }
 
 /**
  * @property showArt whether the album cover fills the player's background. AMOLED turns it off:
@@ -41,6 +41,7 @@ enum class WearTheme(
     SAKURA("sakura", R.string.theme_sakura, decor = Decor.SAKURA),
     NARUTO("naruto", R.string.theme_naruto, decor = Decor.NARUTO),
     SASUKE("sasuke", R.string.theme_sasuke, decor = Decor.SASUKE),
+    SHIKAMARU("shikamaru", R.string.theme_shikamaru, decor = Decor.SHIKAMARU),
     SUNSET("sunset", R.string.theme_sunset, decor = Decor.SUNSET),
     NIGHT_SKY("night_sky", R.string.theme_night_sky, decor = Decor.NIGHT_SKY),
     COASTAL("coastal", R.string.theme_coastal, decor = Decor.COASTAL),
@@ -161,6 +162,9 @@ private val NarutoColors =
 private val SasukeColors =
     accentScheme(0xFF9FB4FF, 0xFF0E1440, 0xFF2F3578, 0xFFB388FF, 0xFFFF6B6B, 0xFF121420, 0xFF1A1D2E, 0xFF25293F, 0xFFB7BEDC)
 
+private val ShikamaruColors =
+    accentScheme(0xFFA8C686, 0xFF1A2A0C, 0xFF45602E, 0xFF9CCBEA, 0xFFE8E0C8, 0xFF141A14, 0xFF1D251D, 0xFF283228, 0xFFBCCBB6)
+
 private val SunsetColors =
     accentScheme(0xFFFFAB76, 0xFF3A1708, 0xFF8A3D2E, 0xFFFF8FB8, 0xFFFFD56B, 0xFF21151A, 0xFF2D1C24, 0xFF3B2530, 0xFFE8C2B4)
 
@@ -187,6 +191,7 @@ fun ArchiveTuneWearTheme(
                 WearTheme.SAKURA -> SakuraColors
                 WearTheme.NARUTO -> NarutoColors
                 WearTheme.SASUKE -> SasukeColors
+                WearTheme.SHIKAMARU -> ShikamaruColors
                 WearTheme.SUNSET -> SunsetColors
                 WearTheme.NIGHT_SKY -> NightSkyColors
                 WearTheme.COASTAL -> CoastalColors
