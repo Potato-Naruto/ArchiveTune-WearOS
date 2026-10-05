@@ -14,9 +14,9 @@ no code module. Change both.
 
 | Direction | Paths |
 |---|---|
-| watch → phone, commands | `/play` `/pause` `/toggle_play` `/skip_next` `/skip_prev` `/toggle_shuffle` `/repeat` `/volume` `/seek` `/search_voice` `/play_item` `/play_queue_item` |
+| watch → phone, commands | `/play` `/pause` `/toggle_play` `/skip_next` `/skip_prev` `/toggle_shuffle` `/repeat` `/volume` `/seek` `/search_voice` `/play_item` `/play_queue_item` `/queue_art` |
 | watch → phone, reads | `/state` `/browse` `/search` `/sync` `/queue` |
-| phone → watch | `/state` `/art` `/browse_result` `/search_result` `/sync_result` `/queue_result` |
+| phone → watch | `/state` `/art` `/browse_result` `/search_result` `/sync_result` `/queue_result` `/queue_art_result` |
 
 ## Phone side (gms source set only)
 
@@ -48,6 +48,12 @@ the current one, the ones coming below, scrolled so the playing song is centred.
 window (15 before, 50 after) in *play order* — it walks the timeline with the shuffle mode, so "next"
 is honest when shuffle is on — and pushes it again on a track change, a timeline change or a shuffle
 toggle. Each row's id is its window index; `/play_queue_item` sends it back and the phone seeks there.
+
+Rows show a 96 px thumbnail. They do not ride in the queue message (65 covers would blow the Data
+Layer's ~100 KB limit): each row carries a stable `art` key (the media id), the watch asks with
+`/queue_art` for the keys it has no thumbnail for, and the phone answers one `/queue_art_result`
+per cover as it loads (`<key>
+<jpeg bytes>`), four at a time.
 
 ## Watch side
 

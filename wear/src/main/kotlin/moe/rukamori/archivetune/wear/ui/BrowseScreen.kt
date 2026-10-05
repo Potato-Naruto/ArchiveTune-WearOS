@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -26,6 +29,7 @@ import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material3.Button
+import androidx.wear.compose.material3.ButtonDefaults
 import androidx.wear.compose.material3.FilledIconButton
 import androidx.wear.compose.material3.FilledTonalIconButton
 import androidx.wear.compose.material3.Icon
@@ -40,7 +44,9 @@ import moe.rukamori.archivetune.wear.WearProtocol
 
 /**
  * One folder of the phone's library tree. A folder that can itself be played — a playlist, an
- * album — gets Play and Shuffle above its songs.
+ * album — gets Play, Shuffle and Search above its songs. Search narrows the list on the watch to the
+ * songs matching what was said; playing one of them still queues the whole folder from that song, so
+ * it carries on through the playlist afterwards.
  */
 @Composable
 fun BrowseScreen(
@@ -53,7 +59,21 @@ fun BrowseScreen(
 ) {
     val browse by viewModel.browse.collectAsStateWithLifecycle()
     val listState = rememberScalingLazyListState()
+    var filter by rememberSaveable(parentId) { mutableStateOf("") }
+    val searchInFolder = rememberSpeechInput(onResult = { filter = it })
     LaunchedEffect(parentId) { viewModel.loadChildren(parentId) }
+
+    val entries = browse[parentId]
+    val shown =
+        if (filter.isEmpty() || entries !is ListState.Loaded) {
+            entries
+        } else {
+            ListState.Loaded(
+                entries.items.filter {
+                    it.title.contains(filter, ignoreCase = true) || it.subtitle.contains(filter, ignoreCase = true)
+                },
+            )
+        }
 
     ScreenScaffold(scrollState = listState) { contentPadding ->
         ScalingLazyColumn(state = listState, contentPadding = contentPadding) {
@@ -84,11 +104,27 @@ fun BrowseScreen(
                         ) {
                             Icon(painterResource(R.drawable.shuffle), stringResource(R.string.shuffle))
                         }
+                        FilledTonalIconButton(onClick = searchInFolder) {
+                            Icon(painterResource(R.drawable.search), stringResource(R.string.search_in_playlist))
+                        }
+                    }
+                }
+            }
+            if (filter.isNotEmpty()) {
+                item {
+                    Button(
+                        onClick = { filter = "" },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(),
+                        icon = { Icon(painterResource(R.drawable.remove), contentDescription = null) },
+                        secondaryLabel = { Text(stringResource(R.string.clear_search)) },
+                    ) {
+                        Text("“$filter”", maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
             mediaEntries(
-                state = browse[parentId],
+                state = shown,
                 onRetry = { viewModel.loadChildren(parentId, force = true) },
                 icon = { if (it.browsable) R.drawable.library_music else R.drawable.music_note },
                 onClick = { entry ->

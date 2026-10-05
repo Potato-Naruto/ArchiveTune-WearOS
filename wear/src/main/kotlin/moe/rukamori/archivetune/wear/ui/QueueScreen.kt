@@ -8,13 +8,18 @@
 
 package moe.rukamori.archivetune.wear.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -41,6 +46,7 @@ import moe.rukamori.archivetune.wear.RemoteViewModel
 @Composable
 fun QueueScreen(viewModel: RemoteViewModel) {
     val queue by viewModel.queue.collectAsStateWithLifecycle()
+    val queueArt by viewModel.queueArt.collectAsStateWithLifecycle()
     val listState = rememberScalingLazyListState()
     val position = queue.currentPosition
     LaunchedEffect(Unit) { viewModel.loadQueue() }
@@ -72,12 +78,22 @@ fun QueueScreen(viewModel: RemoteViewModel) {
                     onClick = { viewModel.playQueueItem(entry.id) },
                     modifier = Modifier.fillMaxWidth().alpha(if (played) 0.55f else 1f),
                     colors = if (playing) ButtonDefaults.buttonColors() else ButtonDefaults.filledTonalButtonColors(),
-                    icon =
-                        if (playing) {
-                            { Icon(painterResource(R.drawable.play), contentDescription = null) }
+                    icon = {
+                        val cover = queueArt[entry.artKey]
+                        if (cover != null) {
+                            Image(
+                                bitmap = cover,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)),
+                            )
                         } else {
-                            null
-                        },
+                            Icon(
+                                painterResource(if (playing) R.drawable.play else R.drawable.music_note),
+                                contentDescription = null,
+                            )
+                        }
+                    },
                     secondaryLabel =
                         entry.artist.takeIf { it.isNotBlank() }?.let { artist ->
                             { Text(artist, maxLines = 1, overflow = TextOverflow.Ellipsis) }

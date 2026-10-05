@@ -25,6 +25,8 @@
     <string name="queue">Queue</string>
     <string name="queue_empty">Nothing queued</string>
     <string name="search">Search</string>
+    <string name="search_in_playlist">Search this playlist</string>
+    <string name="clear_search">Tap to clear</string>
     <string name="playlists">Playlists</string>
     <string name="albums">Albums</string>
     <string name="sync_playlists">Sync playlists</string>
