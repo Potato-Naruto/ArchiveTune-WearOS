@@ -29,12 +29,15 @@ internal object WearProtocol {
     const val PATH_BROWSE = "/browse"
     const val PATH_SEARCH = "/search"
     const val PATH_SYNC = "/sync"
+    const val PATH_QUEUE = "/queue"
+    const val PATH_PLAY_QUEUE_ITEM = "/play_queue_item"
 
     // Phone -> watch. PATH_STATE is reused for the reply.
     const val PATH_ART = "/art"
     const val PATH_BROWSE_RESULT = "/browse_result"
     const val PATH_SEARCH_RESULT = "/search_result"
     const val PATH_SYNC_RESULT = "/sync_result"
+    const val PATH_QUEUE_RESULT = "/queue_result"
 
     const val KEY_TITLE = "title"
     const val KEY_ARTIST = "artist"
@@ -56,6 +59,7 @@ internal object WearProtocol {
     const val KEY_PLAYABLE = "playable"
     const val KEY_KIND = "kind"
     const val KEY_COUNT = "count"
+    const val KEY_CURRENT = "current"
 
     // Values of KEY_REPEAT and the payload of PATH_REPEAT; the same numbers as Media3's
     // Player.REPEAT_MODE_* so the phone can pass them straight through.

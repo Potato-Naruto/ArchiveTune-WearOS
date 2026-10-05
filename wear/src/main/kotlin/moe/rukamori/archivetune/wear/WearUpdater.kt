@@ -12,12 +12,8 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.job.JobInfo
-import android.app.job.JobParameters
 import android.app.job.JobScheduler
-import android.app.job.JobService
 import android.content.BroadcastReceiver
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
@@ -26,7 +22,6 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
-import kotlin.concurrent.thread
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,9 +46,7 @@ object WearUpdater {
     private const val CHANNEL_ID = "updates"
     private const val NOTIFICATION_ID = 7301
     private const val JOB_ID = 7301
-    private const val CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000L
     const val PREFERENCES = "wear"
-    const val KEY_AUTO_UPDATE = "auto_update"
 
     sealed interface InstallState {
         data object Idle : InstallState
@@ -66,39 +59,13 @@ object WearUpdater {
     private val _installing = MutableStateFlow<InstallState>(InstallState.Idle)
     val installing: StateFlow<InstallState> = _installing.asStateFlow()
 
-    fun isAutoUpdate(context: Context): Boolean =
-        context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).getBoolean(KEY_AUTO_UPDATE, false)
-
-    fun setAutoUpdate(
-        context: Context,
-        enabled: Boolean,
-    ) {
-        context
-            .getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_AUTO_UPDATE, enabled)
-            .apply()
-        schedule(context)
-    }
-
-    /** (Re)arms or cancels the periodic Wi-Fi check to match the preference. Safe to call often. */
-    fun schedule(context: Context) {
-        val scheduler = context.getSystemService(JobScheduler::class.java)
-        if (!isAutoUpdate(context)) {
-            scheduler.cancel(JOB_ID)
-            return
-        }
-        if (scheduler.getPendingJob(JOB_ID) != null) return
-        scheduler.schedule(
-            JobInfo
-                .Builder(JOB_ID, ComponentName(context, UpdateJobService::class.java))
-                // Unmetered is how the platform spells "on Wi-Fi".
-                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED)
-                .setRequiresBatteryNotLow(true)
-                .setPeriodic(CHECK_INTERVAL_MS)
-                .setPersisted(true)
-                .build(),
-        )
+    /**
+     * Updates are checked only when the user asks. Earlier builds could arm a periodic Wi-Fi job;
+     * this removes one left over from them, and the preference that armed it.
+     */
+    fun cancelScheduledChecks(context: Context) {
+        context.getSystemService(JobScheduler::class.java).cancel(JOB_ID)
+        context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).edit().remove("auto_update").apply()
     }
 
     fun installedVersion(context: Context): String =
@@ -279,27 +246,4 @@ class InstallResultReceiver : BroadcastReceiver() {
             else -> WearUpdater.markIdle(failed = true)
         }
     }
-}
-
-/** The periodic Wi-Fi check behind the auto-update switch. */
-class UpdateJobService : JobService() {
-    override fun onStartJob(params: JobParameters): Boolean {
-        if (!WearUpdater.isAutoUpdate(this) || !WearUpdater.canInstall(this)) return false
-        thread(name = "wear-update") {
-            val retry =
-                try {
-                    val release = WearUpdater.fetchLatest()
-                    if (release != null && WearUpdater.isNewer(this, release)) {
-                        WearUpdater.install(this, WearUpdater.download(this, release))
-                    }
-                    false
-                } catch (_: Throwable) {
-                    true
-                }
-            jobFinished(params, retry)
-        }
-        return true
-    }
-
-    override fun onStopJob(params: JobParameters): Boolean = true
 }

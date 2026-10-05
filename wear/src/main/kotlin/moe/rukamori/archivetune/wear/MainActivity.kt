@@ -35,7 +35,6 @@ import moe.rukamori.archivetune.wear.ui.HomeScreen
 import moe.rukamori.archivetune.wear.ui.SearchScreen
 import moe.rukamori.archivetune.wear.ui.SettingsScreen
 import moe.rukamori.archivetune.wear.ui.ThemeScreen
-import moe.rukamori.archivetune.wear.ui.UpdateScreen
 import moe.rukamori.archivetune.wear.ui.VolumeScreen
 
 class MainActivity : ComponentActivity() {
@@ -47,6 +46,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WearUpdater.cancelScheduledChecks(this)
         if (savedInstanceState == null) {
             playFromSearch(intent)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -111,10 +111,8 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 onOpenThemes = { navController.navigate(ROUTE_THEMES) },
                                 onOpenVolume = { navController.navigate(ROUTE_VOLUME) },
-                                onOpenUpdates = { navController.navigate(ROUTE_UPDATES) },
                             )
                         }
-                        composable(ROUTE_UPDATES) { UpdateScreen() }
                         composable(ROUTE_VOLUME) { VolumeScreen(viewModel) }
                         composable(ROUTE_THEMES) { ThemeScreen(viewModel) }
                     }
@@ -157,6 +155,5 @@ class MainActivity : ComponentActivity() {
         const val ROUTE_SETTINGS = "settings"
         const val ROUTE_VOLUME = "volume"
         const val ROUTE_THEMES = "themes"
-        const val ROUTE_UPDATES = "updates"
     }
 }

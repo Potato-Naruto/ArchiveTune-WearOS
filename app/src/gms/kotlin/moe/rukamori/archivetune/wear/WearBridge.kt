@@ -68,6 +68,11 @@ internal object WearBridge {
     private const val SEARCH_PAGE_SIZE = 30
     private const val SEARCH_CONTAINER_LIMIT = 6
 
+    // How much of the queue the watch is shown around the current song, in play order. A queue can
+    // run to hundreds of songs; the watch only ever needs the neighbourhood.
+    private const val QUEUE_BEFORE = 15
+    private const val QUEUE_AFTER = 50
+
     // Big enough to fill a round watch face, small enough to stay far below the Data Layer's
     // ~100 KB message limit once JPEG-compressed.
     private const val ART_SIZE_PX = 320
@@ -80,6 +85,7 @@ internal object WearBridge {
     private var publishJob: Job? = null
     private var artJob: Job? = null
     private var sentArtKey: String? = null
+    private var queueDirty = false
 
     /** Runs a request that only reads, without holding up the commands queued behind it. */
     fun launch(
@@ -164,6 +170,21 @@ internal object WearBridge {
                     sendArt(appContext, browser, force = true)
                 }
 
+                WearProtocol.PATH_QUEUE -> {
+                    subscribers[nodeId] = SystemClock.elapsedRealtime()
+                    send(appContext, nodeId, WearProtocol.PATH_QUEUE_RESULT, queueJson(browser))
+                }
+
+                // The payload is a window index from a queue message, which is stable across
+                // shuffle: it names the item, not its place in the play order.
+                WearProtocol.PATH_PLAY_QUEUE_ITEM -> {
+                    text.toIntOrNull()?.takeIf { it in 0 until browser.mediaItemCount }?.let { index ->
+                        browser.seekToDefaultPosition(index)
+                        if (browser.playbackState == Player.STATE_IDLE) browser.prepare()
+                        browser.play()
+                    }
+                }
+
                 WearProtocol.PATH_BROWSE -> {
                     val result = browser.getChildren(text, 0, BROWSE_PAGE_SIZE, null).await()
                     send(
@@ -211,6 +232,14 @@ internal object WearBridge {
                     events: Player.Events,
                 ) {
                     if (subscribers.isEmpty()) return
+                    if (events.containsAny(
+                            Player.EVENT_TIMELINE_CHANGED,
+                            Player.EVENT_MEDIA_ITEM_TRANSITION,
+                            Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED,
+                        )
+                    ) {
+                        queueDirty = true
+                    }
                     // One track change raises several event batches; the watch needs one update.
                     publishJob?.cancel()
                     publishJob =
@@ -218,6 +247,11 @@ internal object WearBridge {
                             delay(100)
                             publishState(context)
                             sendArt(context, connected, force = false)
+                            if (queueDirty) {
+                                queueDirty = false
+                                val queue = queueJson(connected)
+                                subscribers.keys.forEach { send(context, it, WearProtocol.PATH_QUEUE_RESULT, queue) }
+                            }
                         }
                 }
             },
@@ -404,6 +438,50 @@ internal object WearBridge {
                 songs.orEmpty() + foundAlbums.orEmpty() + foundPlaylists.orEmpty()
             }
         }
+
+    /**
+     * The songs around the current one in the order they will actually play: walking the timeline
+     * with the shuffle mode keeps "next" honest when shuffle is on. Each row's id is its window
+     * index, which `PATH_PLAY_QUEUE_ITEM` hands back.
+     */
+    private fun queueJson(browser: MediaBrowser): ByteArray {
+        val timeline = browser.currentTimeline
+        val items = JSONArray()
+        var current = -1
+        if (!timeline.isEmpty) {
+            val shuffle = browser.shuffleModeEnabled
+            current = browser.currentMediaItemIndex
+            val order = ArrayDeque<Int>()
+            order.addLast(current)
+            var index = current
+            for (step in 0 until QUEUE_BEFORE) {
+                index = timeline.getPreviousWindowIndex(index, Player.REPEAT_MODE_OFF, shuffle)
+                if (index == C.INDEX_UNSET) break
+                order.addFirst(index)
+            }
+            index = current
+            for (step in 0 until QUEUE_AFTER) {
+                index = timeline.getNextWindowIndex(index, Player.REPEAT_MODE_OFF, shuffle)
+                if (index == C.INDEX_UNSET) break
+                order.addLast(index)
+            }
+            order.forEach { windowIndex ->
+                val metadata = browser.getMediaItemAt(windowIndex).mediaMetadata
+                items.put(
+                    JSONObject()
+                        .put(WearProtocol.KEY_ID, windowIndex.toString())
+                        .put(WearProtocol.KEY_TITLE, metadata.title?.toString().orEmpty())
+                        .put(WearProtocol.KEY_SUBTITLE, metadata.artist?.toString().orEmpty()),
+                )
+            }
+        }
+        return JSONObject()
+            .put(WearProtocol.KEY_CURRENT, current)
+            .put(WearProtocol.KEY_COUNT, timeline.windowCount)
+            .put(WearProtocol.KEY_ITEMS, items)
+            .toString()
+            .toByteArray(Charsets.UTF_8)
+    }
 
     private fun entryJson(item: MediaItem): JSONObject {
         val metadata = item.mediaMetadata

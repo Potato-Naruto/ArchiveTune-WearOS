@@ -20,9 +20,10 @@ import moe.rukamori.archivetune.wear.MediaEntry
 import moe.rukamori.archivetune.wear.RemoteViewModel
 
 private const val PAGE_PLAYER = 0
-private const val PAGE_LIBRARY = 1
+private const val PAGE_QUEUE = 1
+private const val PAGE_LIBRARY = 2
 
-/** The root of the app: the player, with the library one swipe to the side. */
+/** The root of the app: the player, the queue one swipe over, then the library. */
 @Composable
 fun HomeScreen(
     viewModel: RemoteViewModel,
@@ -30,7 +31,7 @@ fun HomeScreen(
     onOpenSearch: (String) -> Unit,
     onBrowse: (MediaEntry) -> Unit,
 ) {
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    val pagerState = rememberPagerState(pageCount = { 3 })
     val showPlayer by viewModel.showPlayer.collectAsStateWithLifecycle()
     LaunchedEffect(showPlayer) {
         if (showPlayer > 0) pagerState.scrollToPage(PAGE_PLAYER)
@@ -41,6 +42,8 @@ fun HomeScreen(
             AnimatedPage(pageIndex = page, pagerState = pagerState) {
                 when (page) {
                     PAGE_PLAYER -> NowPlayingScreen(viewModel = viewModel)
+
+                    PAGE_QUEUE -> QueueScreen(viewModel = viewModel)
 
                     PAGE_LIBRARY ->
                         LibraryScreen(

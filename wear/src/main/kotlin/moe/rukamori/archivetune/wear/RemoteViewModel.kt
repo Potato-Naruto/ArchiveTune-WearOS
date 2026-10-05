@@ -57,6 +57,21 @@ data class MediaEntry(
     val kind: String = WearProtocol.KIND_SONG,
 )
 
+/** One row of the phone's queue. [id] is the phone's own index for it, handed back to play it. */
+data class QueueEntry(
+    val id: String,
+    val title: String,
+    val artist: String,
+)
+
+/** The songs around the current one in play order; [currentId] names the one playing. */
+data class QueueState(
+    val items: List<QueueEntry> = emptyList(),
+    val currentId: String? = null,
+) {
+    val currentPosition: Int get() = items.indexOfFirst { it.id == currentId }
+}
+
 sealed interface SyncState {
     data object Idle : SyncState
 
@@ -88,6 +103,9 @@ class RemoteViewModel(
 
     private val _player = MutableStateFlow(PlayerState())
     val player: StateFlow<PlayerState> = _player.asStateFlow()
+
+    private val _queue = MutableStateFlow(QueueState())
+    val queue: StateFlow<QueueState> = _queue.asStateFlow()
 
     private val _art = MutableStateFlow<ImageBitmap?>(null)
     val art: StateFlow<ImageBitmap?> = _art.asStateFlow()
@@ -159,6 +177,14 @@ class RemoteViewModel(
     }
 
     fun skipNext() = send(WearProtocol.PATH_SKIP_NEXT)
+
+    /** The phone also pushes the queue whenever it changes; this is for when the screen opens. */
+    fun loadQueue() = send(WearProtocol.PATH_QUEUE)
+
+    fun playQueueItem(id: String) {
+        _queue.update { it.copy(currentId = id) }
+        send(WearProtocol.PATH_PLAY_QUEUE_ITEM, id)
+    }
 
     fun skipPrevious() = send(WearProtocol.PATH_SKIP_PREV)
 
@@ -293,6 +319,25 @@ class RemoteViewModel(
                             if (keepLocalVolume) _player.value.volume else json.optInt(WearProtocol.KEY_VOLUME),
                         maxVolume = json.optInt(WearProtocol.KEY_MAX_VOLUME),
                         receivedAtMs = now,
+                    )
+            }
+
+            WearProtocol.PATH_QUEUE_RESULT -> {
+                val json = JSONObject(event.data.toString(Charsets.UTF_8))
+                val array = json.getJSONArray(WearProtocol.KEY_ITEMS)
+                val current = json.optInt(WearProtocol.KEY_CURRENT, -1)
+                _queue.value =
+                    QueueState(
+                        items =
+                            List(array.length()) { index ->
+                                val item = array.getJSONObject(index)
+                                QueueEntry(
+                                    id = item.optString(WearProtocol.KEY_ID),
+                                    title = item.optString(WearProtocol.KEY_TITLE),
+                                    artist = item.optString(WearProtocol.KEY_SUBTITLE),
+                                )
+                            },
+                        currentId = current.takeIf { it >= 0 }?.toString(),
                     )
             }
 

@@ -44,21 +44,9 @@ class UpdateViewModel(
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
 
-    private val _autoUpdate = MutableStateFlow(WearUpdater.isAutoUpdate(app))
-    val autoUpdate: StateFlow<Boolean> = _autoUpdate.asStateFlow()
-
     val installing: StateFlow<WearUpdater.InstallState> = WearUpdater.installing
 
     val version: String = WearUpdater.installedVersion(app)
-
-    init {
-        WearUpdater.schedule(app)
-    }
-
-    fun setAutoUpdate(enabled: Boolean) {
-        _autoUpdate.value = enabled
-        WearUpdater.setAutoUpdate(app, enabled)
-    }
 
     fun canInstall(): Boolean = WearUpdater.canInstall(app)
 
