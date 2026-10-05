@@ -22,6 +22,8 @@
     <string name="nothing_playing">Nothing playing</string>
     <string name="nothing_playing_hint">Swipe to pick something</string>
     <string name="library">Library</string>
+    <string name="queue">Queue</string>
+    <string name="queue_empty">Nothing queued</string>
     <string name="search">Search</string>
     <string name="playlists">Playlists</string>
     <string name="albums">Albums</string>
@@ -66,8 +68,6 @@
     <string name="downloading_percent">Downloading %1$d%%</string>
     <string name="installing">Installing…</string>
     <string name="update_failed">Couldn\'t update</string>
-    <string name="auto_update">Auto-update on Wi-Fi</string>
-    <string name="auto_update_hint">Checks about twice a day</string>
     <string name="allow_installs">Allow installs, then retry</string>
     <string name="update_ready">Update ready</string>
     <string name="update_tap_to_install">Tap to install</string>

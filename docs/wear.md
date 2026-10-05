@@ -14,9 +14,9 @@ no code module. Change both.
 
 | Direction | Paths |
 |---|---|
-| watch → phone, commands | `/play` `/pause` `/toggle_play` `/skip_next` `/skip_prev` `/toggle_shuffle` `/repeat` `/volume` `/seek` `/search_voice` `/play_item` |
-| watch → phone, reads | `/state` `/browse` `/search` `/sync` |
-| phone → watch | `/state` `/art` `/browse_result` `/search_result` `/sync_result` |
+| watch → phone, commands | `/play` `/pause` `/toggle_play` `/skip_next` `/skip_prev` `/toggle_shuffle` `/repeat` `/volume` `/seek` `/search_voice` `/play_item` `/play_queue_item` |
+| watch → phone, reads | `/state` `/browse` `/search` `/sync` `/queue` |
+| phone → watch | `/state` `/art` `/browse_result` `/search_result` `/sync_result` `/queue_result` |
 
 ## Phone side (gms source set only)
 
@@ -41,9 +41,17 @@ the same media ids (`onSetMediaItems`); nothing in the bridge reads the database
   albums and playlists looked up directly with `YouTube.search`. Those are handed over as
   `online_playlist/<id>` folders, which the browse tree already opens, plays and shuffles.
 
+## Queue
+
+The second page of the watch's home pager is the phone's queue: the songs that already played above
+the current one, the ones coming below, scrolled so the playing song is centred. The phone sends a
+window (15 before, 50 after) in *play order* — it walks the timeline with the shuffle mode, so "next"
+is honest when shuffle is on — and pushes it again on a track change, a timeline change or a shuffle
+toggle. Each row's id is its window index; `/play_queue_item` sends it back and the phone seeks there.
+
 ## Watch side
 
-`RemoteViewModel` owns all state; `ui/` holds the screens (player, library, browse, search results,
+`RemoteViewModel` owns all state; `ui/` holds the screens (player, queue, library, browse, search results,
 volume, theme). Themes are in `WearTheme.kt`; AMOLED deliberately draws no album art.
 
 On the player, holding Previous or Next for a second seeks 10 s at a time instead of skipping, and

@@ -8,6 +8,10 @@
 
 package moe.rukamori.archivetune.wear.ui
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,11 +22,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
@@ -41,6 +47,9 @@ import androidx.wear.compose.material3.Text
 import moe.rukamori.archivetune.wear.R
 import moe.rukamori.archivetune.wear.RemoteViewModel
 import moe.rukamori.archivetune.wear.SyncState
+import moe.rukamori.archivetune.wear.UpdateState
+import moe.rukamori.archivetune.wear.UpdateViewModel
+import moe.rukamori.archivetune.wear.WearUpdater
 import moe.rukamori.archivetune.wear.WearTheme
 
 /** The phone's media volume, one step per tap. */
@@ -109,12 +118,15 @@ fun SettingsScreen(
     viewModel: RemoteViewModel,
     onOpenThemes: () -> Unit,
     onOpenVolume: () -> Unit,
-    onOpenUpdates: () -> Unit,
+    updates: UpdateViewModel = viewModel(),
 ) {
     val theme by viewModel.theme.collectAsStateWithLifecycle()
     val artDim by viewModel.artDim.collectAsStateWithLifecycle()
     val keepScreenOn by viewModel.keepScreenOn.collectAsStateWithLifecycle()
     val syncOnOpen by viewModel.syncOnOpen.collectAsStateWithLifecycle()
+    val updateState by updates.state.collectAsStateWithLifecycle()
+    val installing by updates.installing.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val listState = rememberScalingLazyListState()
     val dim = artDim ?: theme.scrimAlpha
 
@@ -195,17 +207,69 @@ fun SettingsScreen(
 
             item { ListHeader { Text(stringResource(R.string.updates)) } }
             item {
+                val busy =
+                    updateState is UpdateState.Checking ||
+                        updateState is UpdateState.Downloading ||
+                        installing == WearUpdater.InstallState.Installing
                 Button(
-                    onClick = onOpenUpdates,
+                    onClick = updates::check,
+                    enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.filledTonalButtonColors(),
-                    icon = { Icon(painterResource(R.drawable.sync), contentDescription = null) },
+                    icon = {
+                        if (busy) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(painterResource(R.drawable.sync), contentDescription = null)
+                        }
+                    },
+                    secondaryLabel = {
+                        Text(
+                            when {
+                                installing == WearUpdater.InstallState.Installing -> stringResource(R.string.installing)
+                                installing == WearUpdater.InstallState.Failed || updateState == UpdateState.Failed ->
+                                    stringResource(R.string.update_failed)
+                                updateState == UpdateState.Checking -> stringResource(R.string.checking)
+                                updateState == UpdateState.UpToDate -> stringResource(R.string.up_to_date)
+                                updateState is UpdateState.Downloading ->
+                                    stringResource(R.string.downloading_percent, (updateState as UpdateState.Downloading).percent)
+                                else -> stringResource(R.string.version_name, updates.version)
+                            },
+                        )
+                    },
                 ) {
-                    Text(stringResource(R.string.updates))
+                    Text(stringResource(R.string.check_for_updates))
+                }
+            }
+            (updateState as? UpdateState.Available)?.let { available ->
+                item {
+                    Button(
+                        onClick = {
+                            if (updates.canInstall()) {
+                                updates.install(available.release)
+                            } else {
+                                openInstallPermission(context)
+                            }
+                        },
+                        enabled = installing != WearUpdater.InstallState.Installing,
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = { Icon(painterResource(R.drawable.add), contentDescription = null) },
+                        secondaryLabel = if (updates.canInstall()) null else ({ Text(stringResource(R.string.allow_installs)) }),
+                    ) {
+                        Text(stringResource(R.string.install_update, available.release.tag))
+                    }
                 }
             }
         }
     }
+}
+
+/** Android gates sideloading per app; this is the screen where the user grants it. */
+private fun openInstallPermission(context: Context) {
+    val intent =
+        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
 }
 
 // Past this the cover is close to black and the slider stops being useful.
