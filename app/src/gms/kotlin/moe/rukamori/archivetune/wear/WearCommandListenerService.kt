@@ -66,7 +66,7 @@ class WearCommandListenerService : WearableListenerService() {
 
         // Lookups can take seconds; run behind the listener thread so a Pause sent meanwhile is
         // not stuck waiting for search results.
-        val READ_PATHS = setOf(WearProtocol.PATH_STATE, WearProtocol.PATH_BROWSE, WearProtocol.PATH_SEARCH, WearProtocol.PATH_QUEUE)
+        val READ_PATHS = setOf(WearProtocol.PATH_STATE, WearProtocol.PATH_BROWSE, WearProtocol.PATH_SEARCH, WearProtocol.PATH_QUEUE, WearProtocol.PATH_QUEUE_ART)
 
         const val COMMAND_TIMEOUT_MS = 30_000L
     }

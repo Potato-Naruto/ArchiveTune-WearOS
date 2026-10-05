@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 
 data class PlayerState(
@@ -62,6 +63,8 @@ data class QueueEntry(
     val id: String,
     val title: String,
     val artist: String,
+    // Key of this song's thumbnail in [RemoteViewModel.queueArt]; not the id, which is a position.
+    val artKey: String,
 )
 
 /** The songs around the current one in play order; [currentId] names the one playing. */
@@ -106,6 +109,12 @@ class RemoteViewModel(
 
     private val _queue = MutableStateFlow(QueueState())
     val queue: StateFlow<QueueState> = _queue.asStateFlow()
+
+    private val _queueArt = MutableStateFlow<Map<String, ImageBitmap>>(emptyMap())
+    val queueArt: StateFlow<Map<String, ImageBitmap>> = _queueArt.asStateFlow()
+
+    // Thumbnails already asked for, so a queue that is pushed again does not ask again.
+    private val requestedQueueArt = HashSet<String>()
 
     private val _art = MutableStateFlow<ImageBitmap?>(null)
     val art: StateFlow<ImageBitmap?> = _art.asStateFlow()
@@ -180,6 +189,16 @@ class RemoteViewModel(
 
     /** The phone also pushes the queue whenever it changes; this is for when the screen opens. */
     fun loadQueue() = send(WearProtocol.PATH_QUEUE)
+
+    private fun requestQueueArt(items: List<QueueEntry>) {
+        if (requestedQueueArt.size > MAX_QUEUE_ART) {
+            requestedQueueArt.clear()
+            _queueArt.value = emptyMap()
+        }
+        val missing = items.map { it.artKey }.filter { it.isNotEmpty() && requestedQueueArt.add(it) }.distinct()
+        if (missing.isEmpty()) return
+        send(WearProtocol.PATH_QUEUE_ART, JSONArray(missing).toString())
+    }
 
     fun playQueueItem(id: String) {
         _queue.update { it.copy(currentId = id) }
@@ -335,10 +354,27 @@ class RemoteViewModel(
                                     id = item.optString(WearProtocol.KEY_ID),
                                     title = item.optString(WearProtocol.KEY_TITLE),
                                     artist = item.optString(WearProtocol.KEY_SUBTITLE),
+                                    artKey = item.optString(WearProtocol.KEY_ART),
                                 )
                             },
                         currentId = current.takeIf { it >= 0 }?.toString(),
                     )
+                requestQueueArt(_queue.value.items)
+            }
+
+            WearProtocol.PATH_QUEUE_ART_RESULT -> {
+                val data = event.data
+                val split = data.indexOf('\n'.code.toByte())
+                if (split > 0) {
+                    val key = String(data, 0, split, Charsets.UTF_8)
+                    viewModelScope.launch {
+                        val bitmap =
+                            withContext(Dispatchers.Default) {
+                                BitmapFactory.decodeByteArray(data, split + 1, data.size - split - 1)?.asImageBitmap()
+                            }
+                        if (bitmap != null) _queueArt.update { it + (key to bitmap) }
+                    }
+                }
             }
 
             WearProtocol.PATH_ART -> {
@@ -429,6 +465,7 @@ class RemoteViewModel(
         /** The playlists folder of the phone's browse tree (`MusicService.PLAYLIST`). */
         const val PLAYLISTS_ID = "playlist"
 
+        private const val MAX_QUEUE_ART = 150
         private const val SYNC_TIMEOUT_MS = 5 * 60_000L
         private const val KEY_THEME = "theme"
         private const val KEY_ART_DIM = "artDim"

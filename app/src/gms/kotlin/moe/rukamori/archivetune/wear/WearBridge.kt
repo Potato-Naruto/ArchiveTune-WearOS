@@ -37,6 +37,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import moe.rukamori.archivetune.innertube.YouTube
 import moe.rukamori.archivetune.innertube.models.AlbumItem
@@ -77,6 +79,11 @@ internal object WearBridge {
     // ~100 KB message limit once JPEG-compressed.
     private const val ART_SIZE_PX = 320
     private const val ART_JPEG_QUALITY = 80
+
+    // Queue rows show a thumbnail a fraction of the size of the player's cover.
+    private const val QUEUE_ART_SIZE_PX = 96
+    private const val QUEUE_ART_JPEG_QUALITY = 75
+    private const val QUEUE_ART_PARALLELISM = 4
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val subscribers = HashMap<String, Long>()
@@ -177,6 +184,36 @@ internal object WearBridge {
 
                 // The payload is a window index from a queue message, which is stable across
                 // shuffle: it names the item, not its place in the play order.
+                // The payload is a JSON array of the media ids the watch has no thumbnail for. Each
+                // goes back as its own message, as soon as it is loaded, so the list fills in
+                // rather than waiting on the slowest cover.
+                WearProtocol.PATH_QUEUE_ART -> {
+                    val wanted = JSONArray(text).let { array -> List(array.length()) { array.getString(it) } }.toSet()
+                    val sources = HashMap<String, Any>()
+                    for (index in 0 until browser.mediaItemCount) {
+                        val item = browser.getMediaItemAt(index)
+                        if (item.mediaId in wanted) {
+                            (item.mediaMetadata.artworkUri ?: item.mediaMetadata.artworkData)?.let { sources[item.mediaId] = it }
+                        }
+                    }
+                    val gate = Semaphore(QUEUE_ART_PARALLELISM)
+                    coroutineScope {
+                        sources.forEach { (mediaId, source) ->
+                            launch {
+                                val bytes = gate.withPermit { loadArt(appContext, source, QUEUE_ART_SIZE_PX, QUEUE_ART_JPEG_QUALITY) }
+                                if (bytes != null) {
+                                    send(
+                                        appContext,
+                                        nodeId,
+                                        WearProtocol.PATH_QUEUE_ART_RESULT,
+                                        mediaId.toByteArray(Charsets.UTF_8) + byteArrayOf('\n'.code.toByte()) + bytes,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 WearProtocol.PATH_PLAY_QUEUE_ITEM -> {
                     text.toIntOrNull()?.takeIf { it in 0 until browser.mediaItemCount }?.let { index ->
                         browser.seekToDefaultPosition(index)
@@ -471,7 +508,10 @@ internal object WearBridge {
                     JSONObject()
                         .put(WearProtocol.KEY_ID, windowIndex.toString())
                         .put(WearProtocol.KEY_TITLE, metadata.title?.toString().orEmpty())
-                        .put(WearProtocol.KEY_SUBTITLE, metadata.artist?.toString().orEmpty()),
+                        .put(WearProtocol.KEY_SUBTITLE, metadata.artist?.toString().orEmpty())
+                        // The thumbnail's cache key on the watch: stable across queue edits, unlike
+                        // the window index.
+                        .put(WearProtocol.KEY_ART, browser.getMediaItemAt(windowIndex).mediaId),
                 )
             }
         }
@@ -555,20 +595,22 @@ internal object WearBridge {
     private suspend fun loadArt(
         context: Context,
         source: Any,
+        sizePx: Int = ART_SIZE_PX,
+        quality: Int = ART_JPEG_QUALITY,
     ): ByteArray? =
         try {
             val request =
                 ImageRequest
                     .Builder(context)
                     .data(source)
-                    .size(ART_SIZE_PX, ART_SIZE_PX)
+                    .size(sizePx, sizePx)
                     .allowHardware(false)
                     .build()
             val bitmap = (context.imageLoader.execute(request) as? SuccessResult)?.image?.toBitmap()
             withContext(Dispatchers.Default) {
                 bitmap?.let {
                     ByteArrayOutputStream().use { out ->
-                        it.compress(Bitmap.CompressFormat.JPEG, ART_JPEG_QUALITY, out)
+                        it.compress(Bitmap.CompressFormat.JPEG, quality, out)
                         out.toByteArray()
                     }
                 }
