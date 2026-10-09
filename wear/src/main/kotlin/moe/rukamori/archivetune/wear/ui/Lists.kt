@@ -16,10 +16,15 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -40,6 +45,51 @@ import androidx.wear.compose.material3.Text
 import moe.rukamori.archivetune.wear.ListState
 import moe.rukamori.archivetune.wear.MediaEntry
 import moe.rukamori.archivetune.wear.R
+
+/** How a list from the phone is ordered on the watch. [DEFAULT] keeps the phone's own order. */
+enum class SortOrder(@StringRes val label: Int) {
+    DEFAULT(R.string.sort_default),
+    TITLE_ASC(R.string.sort_title_asc),
+    TITLE_DESC(R.string.sort_title_desc),
+    ARTIST(R.string.sort_artist),
+    ;
+
+    fun next(): SortOrder = entries[(ordinal + 1) % entries.size]
+
+    // Folders stay above songs so a sorted playlist doesn't bury its sub-folders.
+    fun apply(items: List<MediaEntry>): List<MediaEntry> =
+        when (this) {
+            DEFAULT -> items
+            TITLE_ASC -> items.sortedWith(compareBy<MediaEntry> { !it.browsable }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+            TITLE_DESC -> items.sortedWith(compareBy<MediaEntry> { !it.browsable }.thenByDescending(String.CASE_INSENSITIVE_ORDER) { it.title })
+            ARTIST -> items.sortedWith(compareBy<MediaEntry> { !it.browsable }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.subtitle }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+        }
+}
+
+/** Sort mode that survives rotation and process death, keyed per list. */
+@Composable
+fun rememberSortOrder(key: String): Pair<SortOrder, () -> Unit> {
+    var order by rememberSaveable(key) { mutableStateOf(SortOrder.DEFAULT) }
+    return order to { order = order.next() }
+}
+
+/** One row that shows the current sort and cycles to the next on tap. */
+fun ScalingLazyListScope.sortButton(
+    order: SortOrder,
+    onCycle: () -> Unit,
+) {
+    item {
+        Button(
+            onClick = onCycle,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(),
+            icon = { Icon(painterResource(R.drawable.sort), contentDescription = null) },
+            secondaryLabel = { Text(stringResource(order.label), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        ) {
+            Text(stringResource(R.string.sort_by))
+        }
+    }
+}
 
 /** A row for one library entry: a folder to open or a song to play. */
 @Composable

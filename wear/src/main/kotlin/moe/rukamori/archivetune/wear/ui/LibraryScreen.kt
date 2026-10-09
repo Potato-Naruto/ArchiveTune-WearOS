@@ -27,6 +27,7 @@ import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
 import moe.rukamori.archivetune.wear.Decor
+import moe.rukamori.archivetune.wear.ListState
 import moe.rukamori.archivetune.wear.MediaEntry
 import moe.rukamori.archivetune.wear.R
 import moe.rukamori.archivetune.wear.RemoteViewModel
@@ -46,6 +47,9 @@ fun LibraryScreen(
     val theme by viewModel.theme.collectAsStateWithLifecycle()
     val search = rememberSpeechInput(onResult = onOpenSearch)
     val listState = rememberScalingLazyListState()
+    val (sortOrder, cycleSort) = rememberSortOrder(PLAYLISTS_ID)
+    val playlists = browse[PLAYLISTS_ID]
+    val sortedPlaylists = if (playlists is ListState.Loaded) ListState.Loaded(sortOrder.apply(playlists.items)) else playlists
     val browseAllTitle = stringResource(R.string.browse_all)
     LaunchedEffect(Unit) { viewModel.loadChildren(PLAYLISTS_ID) }
 
@@ -65,8 +69,9 @@ fun LibraryScreen(
                 }
             }
             item { ListHeader { Text(stringResource(R.string.playlists)) } }
+            if (playlists is ListState.Loaded && playlists.items.size > 1) sortButton(sortOrder, cycleSort)
             mediaEntries(
-                state = browse[PLAYLISTS_ID],
+                state = sortedPlaylists,
                 onRetry = { viewModel.loadChildren(PLAYLISTS_ID, force = true) },
                 icon = { R.drawable.library_music },
                 onClick = onBrowse,

@@ -63,16 +63,21 @@ fun BrowseScreen(
     val searchInFolder = rememberSpeechInput(onResult = { filter = it })
     LaunchedEffect(parentId) { viewModel.loadChildren(parentId) }
 
+    val (sortOrder, cycleSort) = rememberSortOrder(parentId)
     val entries = browse[parentId]
     val shown =
-        if (filter.isEmpty() || entries !is ListState.Loaded) {
+        if (entries !is ListState.Loaded) {
             entries
         } else {
-            ListState.Loaded(
-                entries.items.filter {
-                    it.title.contains(filter, ignoreCase = true) || it.subtitle.contains(filter, ignoreCase = true)
-                },
-            )
+            val matching =
+                if (filter.isEmpty()) {
+                    entries.items
+                } else {
+                    entries.items.filter {
+                        it.title.contains(filter, ignoreCase = true) || it.subtitle.contains(filter, ignoreCase = true)
+                    }
+                }
+            ListState.Loaded(sortOrder.apply(matching))
         }
 
     ScreenScaffold(scrollState = listState) { contentPadding ->
@@ -110,6 +115,7 @@ fun BrowseScreen(
                     }
                 }
             }
+            if (entries is ListState.Loaded && entries.items.size > 1) sortButton(sortOrder, cycleSort)
             if (filter.isNotEmpty()) {
                 item {
                     Button(
