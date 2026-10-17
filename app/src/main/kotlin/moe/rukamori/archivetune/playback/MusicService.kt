@@ -10560,6 +10560,7 @@ class MusicService :
 
         const val ROOT = "root"
         const val HOME = "home"
+        const val LYRICS = "lyrics"
         const val HOME_QUICK_PICKS = "home_quick_picks"
 
         // Prefix for the dedicated player-cache key used by Tidal streams so their bytes never

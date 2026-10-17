@@ -54,8 +54,11 @@ import moe.rukamori.archivetune.constants.PlaylistSortType
 import moe.rukamori.archivetune.constants.SongSortType
 import moe.rukamori.archivetune.constants.ShowSpotifyPlaylistsKey
 import moe.rukamori.archivetune.db.MusicDatabase
+import moe.rukamori.archivetune.db.entities.LyricsEntity
 import moe.rukamori.archivetune.db.entities.PlaylistEntity
 import moe.rukamori.archivetune.db.entities.PlaylistSong
+import moe.rukamori.archivetune.lyrics.LyricsEntry
+import moe.rukamori.archivetune.lyrics.LyricsUtils
 import moe.rukamori.archivetune.db.entities.Song
 import moe.rukamori.archivetune.extensions.metadata
 import moe.rukamori.archivetune.extensions.toMediaItem
@@ -387,6 +390,7 @@ class MediaLibrarySessionCallback
                     when (parentId) {
                         MusicService.ROOT -> {
                             listOfNotNull(
+                                staticFolderItem(MusicService.LYRICS),
                                 staticFolderItem(MusicService.HOME),
                                 staticFolderItem(MusicService.QUICK_PICKS),
                                 staticFolderItem(MusicService.RECENT),
@@ -397,6 +401,10 @@ class MediaLibrarySessionCallback
                                 staticFolderItem(MusicService.ALBUM),
                                 staticFolderItem(MusicService.PLAYLIST),
                             )
+                        }
+
+                        MusicService.LYRICS -> {
+                            lyricsItems(session)
                         }
 
                         MusicService.HOME -> {
@@ -1881,6 +1889,15 @@ class MediaLibrarySessionCallback
                         MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS,
                     )
 
+                MusicService.LYRICS ->
+                    browsableMediaItem(
+                        MusicService.LYRICS,
+                        context.getString(R.string.lyrics),
+                        null,
+                        drawableUri(R.drawable.mic),
+                        MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
+                    )
+
                 MusicService.QUICK_PICKS ->
                     queueMediaItem(
                         MusicService.QUICK_PICKS,
@@ -2080,6 +2097,56 @@ class MediaLibrarySessionCallback
          * `isBrowsable` unset; `LibraryResult.ofItemList` throws on any such item, failing the whole
          * search or folder listing for every browser.
          */
+        /**
+         * The current song's lyrics as read-only rows. Android Auto's media template has no lyrics
+         * view and the host owns list scrolling, so the best a media app can do is a list of lines
+         * with the line being sung marked; the host decides where the list sits.
+         */
+        private suspend fun lyricsItems(session: MediaLibrarySession): List<MediaItem> {
+            val (songId, positionMs) =
+                withContext(Dispatchers.Main) {
+                    session.player.currentMediaItem?.mediaId to session.player.currentPosition
+                }
+            if (songId == null) return listOf(lyricsLineItem("empty", context.getString(R.string.lyrics_not_found), false))
+
+            val raw = database.getLyricsById(songId)?.lyrics
+            val synced = raw?.let { LyricsUtils.parseLyrics(it) }.orEmpty().filter { it.text.isNotBlank() }
+            val lines =
+                synced.ifEmpty {
+                    // Plain (unsynced) lyrics have no timestamps; show them as-is with no highlight.
+                    raw
+                        ?.takeUnless { it == LyricsEntity.LYRICS_NOT_FOUND }
+                        ?.lines()
+                        ?.filter { it.isNotBlank() }
+                        ?.map { LyricsEntry(-1L, it.trim()) }
+                        .orEmpty()
+                }
+            if (lines.isEmpty()) return listOf(lyricsLineItem("empty", context.getString(R.string.lyrics_not_found), false))
+
+            val current = lines.indexOfLast { it.time in 0..positionMs }
+            return lines.mapIndexed { index, line ->
+                lyricsLineItem(index.toString(), line.text, index == current)
+            }
+        }
+
+        private fun lyricsLineItem(
+            id: String,
+            text: String,
+            isCurrent: Boolean,
+        ) = MediaItem
+            .Builder()
+            .setMediaId("${MusicService.LYRICS}/$id")
+            .setMediaMetadata(
+                MediaMetadata
+                    .Builder()
+                    .setTitle(if (isCurrent) "▶ $text" else text)
+                    .setIsPlayable(false)
+                    .setIsBrowsable(false)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                    .setExtras(playableExtras())
+                    .build(),
+            ).build()
+
         private fun MediaItem.withBrowsableFlags(): MediaItem =
             if (mediaMetadata.isBrowsable != null) {
                 this
