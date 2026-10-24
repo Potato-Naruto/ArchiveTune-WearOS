@@ -12,6 +12,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
@@ -404,6 +405,7 @@ class MediaLibrarySessionCallback
                         }
 
                         MusicService.LYRICS -> {
+                            lyricsLastRead = SystemClock.elapsedRealtime()
                             lyricsItems(session)
                         }
 
@@ -783,6 +785,14 @@ class MediaLibrarySessionCallback
                     }
                 }
                 val path = firstItem.mediaId.split("/").filter { it.isNotBlank() }
+                if (path.firstOrNull() == MusicService.LYRICS) {
+                    // A tapped lyrics row seeks the playing song to that line; the queue stays.
+                    val current = mediaSession.currentMediaItemsWithStartPosition()
+                    val songId = current.mediaItems.getOrNull(current.startIndex)?.mediaId
+                    val index = path.getOrNull(1)?.takeWhile { it.isDigit() }?.toIntOrNull()
+                    val time = index?.let { lyricsLines(songId).getOrNull(it)?.time }?.takeIf { it >= 0 }
+                    return@future if (time == null) current else MediaSession.MediaItemsWithStartPosition(current.mediaItems, current.startIndex, time)
+                }
                 when (path.firstOrNull()) {
                     MusicService.HOME_QUICK_PICKS -> {
                         val songs =
@@ -2111,7 +2121,9 @@ class MediaLibrarySessionCallback
             if (lines.isEmpty()) return listOf(lyricsLineItem("empty", context.getString(R.string.lyrics_not_found), false))
             val current = lines.indexOfLast { it.time in 0..positionMs }
             return lines.mapIndexed { index, line ->
-                lyricsLineItem(index.toString(), line.text, index == current)
+                // The marked row gets its own id: Auto can diff a refreshed list by id and keep the
+                // old row when only the title changed.
+                lyricsLineItem(if (index == current) "$index-now" else index.toString(), line.text, index == current)
             }
         }
 
@@ -2137,10 +2149,19 @@ class MediaLibrarySessionCallback
             return lines
         }
 
-        /** True while an Android Auto browser has the lyrics folder open. */
         @Volatile
-        var lyricsFolderOpen = false
-            private set
+        private var lyricsSubscribed = false
+
+        @Volatile
+        private var lyricsLastRead = 0L
+
+        /**
+         * True while a browser has the lyrics folder open. Auto does not always subscribe, so a
+         * recent read of the folder counts too; each push makes Auto read it again, which keeps
+         * the window open for as long as the list is on screen.
+         */
+        val lyricsFolderOpen: Boolean
+            get() = lyricsSubscribed || SystemClock.elapsedRealtime() - lyricsLastRead < LYRICS_OPEN_WINDOW_MS
 
         override fun onSubscribe(
             session: MediaLibrarySession,
@@ -2148,7 +2169,7 @@ class MediaLibrarySessionCallback
             parentId: String,
             params: MediaLibraryService.LibraryParams?,
         ): ListenableFuture<LibraryResult<Void>> {
-            if (parentId == MusicService.LYRICS) lyricsFolderOpen = true
+            if (parentId == MusicService.LYRICS) lyricsSubscribed = true
             return Futures.immediateFuture(LibraryResult.ofVoid())
         }
 
@@ -2157,7 +2178,7 @@ class MediaLibrarySessionCallback
             browser: MediaSession.ControllerInfo,
             parentId: String,
         ): ListenableFuture<LibraryResult<Void>> {
-            if (parentId == MusicService.LYRICS) lyricsFolderOpen = false
+            if (parentId == MusicService.LYRICS) lyricsSubscribed = false
             return Futures.immediateFuture(LibraryResult.ofVoid())
         }
 
@@ -2174,6 +2195,8 @@ class MediaLibrarySessionCallback
             return "$songId:${lines.size}:${lines.indexOfLast { it.time in 0..positionMs }}"
         }
 
+        // Rows must be playable or browsable for Auto to list them as tappable; a tap seeks to the
+        // line (see onSetMediaItems) rather than starting anything.
         private fun lyricsLineItem(
             id: String,
             text: String,
@@ -2185,7 +2208,7 @@ class MediaLibrarySessionCallback
                 MediaMetadata
                     .Builder()
                     .setTitle(if (isCurrent) "▶ $text" else text)
-                    .setIsPlayable(false)
+                    .setIsPlayable(id != "empty")
                     .setIsBrowsable(false)
                     .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
                     .setExtras(playableExtras())
@@ -2361,6 +2384,7 @@ class MediaLibrarySessionCallback
         }
 
         companion object {
+            private const val LYRICS_OPEN_WINDOW_MS = 30_000L
             private const val EXTRA_CONTENT_STYLE_SUPPORTED = "android.media.browse.CONTENT_STYLE_SUPPORTED"
             private const val EXTRA_CONTENT_STYLE_BROWSABLE_HINT =
                 "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT"
