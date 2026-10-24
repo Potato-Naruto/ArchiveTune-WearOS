@@ -1228,6 +1228,24 @@ class MusicService :
         )
         addSession(mediaSession)
 
+        // Auto lists lyrics as a static folder, so push a refresh whenever the sung line (or the
+        // lyrics themselves) change while that folder is open.
+        scope.launch {
+            var lastKey: String? = null
+            while (true) {
+                delay(1000)
+                if (!mediaLibrarySessionCallback.lyricsFolderOpen) {
+                    lastKey = null
+                    continue
+                }
+                val key = mediaLibrarySessionCallback.lyricsStateKey(mediaSession)
+                if (key != lastKey) {
+                    lastKey = key
+                    mediaSession.notifyChildrenChanged(LYRICS, Int.MAX_VALUE, null)
+                }
+            }
+        }
+
         updateNotification()
         player.repeatMode = REPEAT_MODE_OFF
 

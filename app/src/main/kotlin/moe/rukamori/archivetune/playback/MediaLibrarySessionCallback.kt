@@ -2107,9 +2107,21 @@ class MediaLibrarySessionCallback
                 withContext(Dispatchers.Main) {
                     session.player.currentMediaItem?.mediaId to session.player.currentPosition
                 }
-            if (songId == null) return listOf(lyricsLineItem("empty", context.getString(R.string.lyrics_not_found), false))
+            val lines = lyricsLines(songId)
+            if (lines.isEmpty()) return listOf(lyricsLineItem("empty", context.getString(R.string.lyrics_not_found), false))
+            val current = lines.indexOfLast { it.time in 0..positionMs }
+            return lines.mapIndexed { index, line ->
+                lyricsLineItem(index.toString(), line.text, index == current)
+            }
+        }
 
+        // Parsed once per stored lyrics row; the live refresh below asks every second.
+        private var lyricsCache: Triple<String, String?, List<LyricsEntry>>? = null
+
+        private suspend fun lyricsLines(songId: String?): List<LyricsEntry> {
+            if (songId == null) return emptyList()
             val raw = database.getLyricsById(songId)?.lyrics
+            lyricsCache?.takeIf { it.first == songId && it.second == raw }?.let { return it.third }
             val synced = raw?.let { LyricsUtils.parseLyrics(it) }.orEmpty().filter { it.text.isNotBlank() }
             val lines =
                 synced.ifEmpty {
@@ -2121,12 +2133,45 @@ class MediaLibrarySessionCallback
                         ?.map { LyricsEntry(-1L, it.trim()) }
                         .orEmpty()
                 }
-            if (lines.isEmpty()) return listOf(lyricsLineItem("empty", context.getString(R.string.lyrics_not_found), false))
+            lyricsCache = Triple(songId, raw, lines)
+            return lines
+        }
 
-            val current = lines.indexOfLast { it.time in 0..positionMs }
-            return lines.mapIndexed { index, line ->
-                lyricsLineItem(index.toString(), line.text, index == current)
-            }
+        /** True while an Android Auto browser has the lyrics folder open. */
+        @Volatile
+        var lyricsFolderOpen = false
+            private set
+
+        override fun onSubscribe(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            params: MediaLibraryService.LibraryParams?,
+        ): ListenableFuture<LibraryResult<Void>> {
+            if (parentId == MusicService.LYRICS) lyricsFolderOpen = true
+            return Futures.immediateFuture(LibraryResult.ofVoid())
+        }
+
+        override fun onUnsubscribe(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+        ): ListenableFuture<LibraryResult<Void>> {
+            if (parentId == MusicService.LYRICS) lyricsFolderOpen = false
+            return Futures.immediateFuture(LibraryResult.ofVoid())
+        }
+
+        /**
+         * Changes whenever the lyrics list Auto should be showing changes: the song, the stored
+         * lyrics (they often arrive after the song starts) or the line being sung.
+         */
+        suspend fun lyricsStateKey(session: MediaLibrarySession): String {
+            val (songId, positionMs) =
+                withContext(Dispatchers.Main) {
+                    session.player.currentMediaItem?.mediaId to session.player.currentPosition
+                }
+            val lines = lyricsLines(songId)
+            return "$songId:${lines.size}:${lines.indexOfLast { it.time in 0..positionMs }}"
         }
 
         private fun lyricsLineItem(

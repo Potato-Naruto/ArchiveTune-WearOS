@@ -86,6 +86,7 @@ dependencies {
     implementation(libs.wear.compose.foundation)
     implementation(libs.wear.compose.navigation)
     implementation(libs.wear.ongoing)
+    implementation(libs.wear.ambient)
     implementation(libs.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.play.services.wearable)

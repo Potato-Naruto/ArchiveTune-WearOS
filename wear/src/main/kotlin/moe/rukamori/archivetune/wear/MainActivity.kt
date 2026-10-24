@@ -22,6 +22,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
@@ -30,6 +33,8 @@ import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
+import androidx.wear.ambient.AmbientLifecycleObserver
+import moe.rukamori.archivetune.wear.ui.AmbientScreen
 import moe.rukamori.archivetune.wear.ui.BrowseScreen
 import moe.rukamori.archivetune.wear.ui.HomeScreen
 import moe.rukamori.archivetune.wear.ui.SearchScreen
@@ -42,11 +47,32 @@ class MainActivity : ComponentActivity() {
 
     // Only asked so the track can stay on the watch face after the app is left; the app works
     // the same without it.
+    // Wear OS dims the screen after the timeout and keeps this activity on it in ambient mode;
+    // the callbacks flip the UI to a black-and-white, burn-in-safe layout and tick once a minute.
+    private var ambient by mutableStateOf(false)
+    private var ambientTick by mutableIntStateOf(0)
+
+    private val ambientCallback =
+        object : AmbientLifecycleObserver.AmbientLifecycleCallback {
+            override fun onEnterAmbient(ambientDetails: AmbientLifecycleObserver.AmbientDetails) {
+                ambient = true
+            }
+
+            override fun onExitAmbient() {
+                ambient = false
+            }
+
+            override fun onUpdateAmbient() {
+                ambientTick++
+            }
+        }
+
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WearUpdater.cancelScheduledChecks(this)
+        lifecycle.addObserver(AmbientLifecycleObserver(this, ambientCallback))
         if (savedInstanceState == null) {
             playFromSearch(intent)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -65,6 +91,10 @@ class MainActivity : ComponentActivity() {
                 } else {
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 }
+            }
+            if (ambient) {
+                AmbientScreen(viewModel = viewModel, tick = ambientTick)
+                return@setContent
             }
             ArchiveTuneWearTheme(theme) {
                 AppScaffold {
