@@ -307,7 +307,9 @@ object Updater {
                 parseReleaseSemVerOrNull(release)?.let { version -> version to release }
             }
 
-        if (parsed.isEmpty()) return nonPreRelease.firstOrNull()
+        // Unversioned tags (wearos-release-N): GitHub's list is not in publish order (release 9
+        // was listed ahead of 12), so take the most recently published rather than the first.
+        if (parsed.isEmpty()) return nonPreRelease.maxByOrNull { it.publishedAt }
 
         val stable = parsed.filter { it.first.preRelease.isEmpty() }
         val candidates = stable.ifEmpty { parsed }
