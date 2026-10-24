@@ -61,10 +61,15 @@ import moe.rukamori.archivetune.wear.WearTheme
 private const val SEEK_STEP_MS = 10_000L
 
 @Composable
-fun NowPlayingScreen(viewModel: RemoteViewModel) {
+fun NowPlayingScreen(
+    viewModel: RemoteViewModel,
+    // Always-on display: the same layout, forced monochrome on black with no cover art or motion.
+    ambient: Boolean = false,
+) {
     val state by viewModel.player.collectAsStateWithLifecycle()
     val art by viewModel.art.collectAsStateWithLifecycle()
-    val theme by viewModel.theme.collectAsStateWithLifecycle()
+    val chosenTheme by viewModel.theme.collectAsStateWithLifecycle()
+    val theme = if (ambient) WearTheme.MONOCHROME else chosenTheme
     val artDim by viewModel.artDim.collectAsStateWithLifecycle()
     val phoneReachable by viewModel.phoneReachable.collectAsStateWithLifecycle()
     val voiceSearch = rememberSpeechInput(onResult = viewModel::playSearch)
@@ -80,8 +85,12 @@ fun NowPlayingScreen(viewModel: RemoteViewModel) {
                 ),
         contentAlignment = Alignment.Center,
     ) {
-        ArtBackground(art = art.takeIf { state.hasItem }, theme = theme, dim = artDim ?: theme.scrimAlpha)
-        RimStickers(theme.decor)
+        if (ambient) {
+            Box(Modifier.fillMaxSize().background(Color.Black))
+        } else {
+            ArtBackground(art = art.takeIf { state.hasItem }, theme = theme, dim = artDim ?: theme.scrimAlpha)
+            RimStickers(theme.decor)
+        }
 
         if (state.maxVolume > 0) {
             LevelIndicator(
@@ -135,7 +144,7 @@ fun NowPlayingScreen(viewModel: RemoteViewModel) {
                     onClick = viewModel::skipPrevious,
                     onSeekStep = { viewModel.seekBy(-SEEK_STEP_MS) },
                 )
-                PlayPauseButton(state = state, onClick = viewModel::togglePlay)
+                PlayPauseButton(state = state, ambient = ambient, onClick = viewModel::togglePlay)
                 SkipButton(
                     icon = R.drawable.skip_next,
                     description = R.string.skip_next,
@@ -217,12 +226,13 @@ private fun ArtBackground(
 @Composable
 private fun PlayPauseButton(
     state: PlayerState,
+    ambient: Boolean,
     onClick: () -> Unit,
 ) {
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     LaunchedEffect(state) {
         now = SystemClock.elapsedRealtime()
-        while (state.playing) {
+        while (state.playing && !ambient) {
             now = SystemClock.elapsedRealtime()
             delay(500)
         }
@@ -230,7 +240,7 @@ private fun PlayPauseButton(
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(74.dp)) {
         WavyProgressRing(
             progress = if (state.durationMs <= 0) 0f else state.positionAt(now).toFloat() / state.durationMs,
-            playing = state.playing,
+            playing = state.playing && !ambient,
             modifier = Modifier.fillMaxSize(),
         )
         FilledIconButton(onClick = onClick, modifier = Modifier.size(54.dp)) {
