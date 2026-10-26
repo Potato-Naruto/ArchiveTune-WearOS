@@ -205,6 +205,14 @@
             android:theme="@style/Theme.ArchiveTune.Transparent" />
 
         <activity
+            android:name=".LockScreenQueueActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.ArchiveTune.Transparent" />
+
+        <activity
             android:name=".RestoreBackupFileActivity"
             android:exported="true"
             android:theme="@style/Theme.ArchiveTune"

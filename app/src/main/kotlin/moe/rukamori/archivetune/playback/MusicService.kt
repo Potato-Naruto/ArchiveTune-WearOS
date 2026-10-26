@@ -134,6 +134,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withTimeout
+import moe.rukamori.archivetune.LockScreenQueueActivity
 import moe.rukamori.archivetune.MainActivity
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.cast.CastMediaItemResolver
@@ -1215,7 +1216,9 @@ class MusicService :
                     PendingIntent.getActivity(
                         this,
                         0,
-                        Intent(this, MainActivity::class.java),
+                        // Hands straight over to MainActivity unless the keyguard is up, in which
+                        // case it shows the previous / next queue over the lock screen.
+                        Intent(this, LockScreenQueueActivity::class.java),
                         PendingIntent.FLAG_IMMUTABLE,
                     ),
                 ).setBitmapLoader(CoilBitmapLoader(this, scope))
