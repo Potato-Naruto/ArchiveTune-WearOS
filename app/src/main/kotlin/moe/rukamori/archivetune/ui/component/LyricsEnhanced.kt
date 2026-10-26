@@ -192,6 +192,7 @@ private const val LYRIC_FOCUS_MIN_SCROLL_PX = 6
 // for frame budget on every line change.
 private const val LYRIC_FOCUS_INSTANT_SCROLL_RATIO = 0.40f
 private const val LYRIC_FOCUS_ANIMATED_DISTANCE = 4
+private const val LYRIC_FOCUS_LAYOUT_WAIT_FRAMES = 3
 private const val SMOOTH_PLAYBACK_MAX_FORWARD_DRIFT_MS = 80L
 private const val SMOOTH_PLAYBACK_MAX_BACKWARD_DRIFT_MS = 180L
 private const val SMOOTH_PLAYBACK_DRIFT_CORRECTION = 0.55f
@@ -1629,8 +1630,15 @@ private suspend fun LazyListState.scrollLyricIntoFocus(
         } else {
             scrollToItem(targetIndex)
         }
-        withFrameNanos { }
-        itemInfo = layoutInfo.visibleItemsInfo.firstOrNull { item -> item.index == targetIndex }
+        // The jump lands on the next measure pass, and the library's own scroller can interrupt
+        // ours mid-flight. Giving up after one frame left the list parked while the highlight
+        // kept advancing, and nothing retried because the line index had not changed.
+        var frames = 0
+        while (itemInfo == null && frames < LYRIC_FOCUS_LAYOUT_WAIT_FRAMES) {
+            withFrameNanos { }
+            itemInfo = layoutInfo.visibleItemsInfo.firstOrNull { item -> item.index == targetIndex }
+            frames++
+        }
     }
 
     itemInfo ?: return
