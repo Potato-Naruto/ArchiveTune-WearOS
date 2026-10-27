@@ -1034,8 +1034,4 @@
     <string name="queue_add_after_manual">Keep added songs in order</string>
     <string name="search_bar_position_bottom_desc">A floating pill that follows the navigation bar style: corner radius, insets and surface</string>
     <string name="queue_add_after_manual_desc">Play next lines up behind your earlier Play next songs and Add to queue goes after all your added songs, both ahead of radio and autoplay songs</string>
-    <string name="lock_queue_previous">Previous</string>
-    <string name="lock_queue_next">Next</string>
-    <string name="lock_queue_empty">Nothing here</string>
-    <string name="lock_queue_channel">Lock screen queue</string>
 </resources>
