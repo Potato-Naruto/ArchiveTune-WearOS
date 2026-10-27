@@ -134,7 +134,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withTimeout
-import moe.rukamori.archivetune.LockScreenQueueActivity
 import moe.rukamori.archivetune.MainActivity
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.cast.CastMediaItemResolver
@@ -1216,9 +1215,7 @@ class MusicService :
                     PendingIntent.getActivity(
                         this,
                         0,
-                        // Hands straight over to MainActivity unless the keyguard is up, in which
-                        // case it shows the previous / next queue over the lock screen.
-                        Intent(this, LockScreenQueueActivity::class.java),
+                        Intent(this, MainActivity::class.java),
                         PendingIntent.FLAG_IMMUTABLE,
                     ),
                 ).setBitmapLoader(CoilBitmapLoader(this, scope))
@@ -1230,6 +1227,8 @@ class MusicService :
             ),
         )
         addSession(mediaSession)
+        lockScreenQueueNotifier =
+            LockScreenQueueNotifier(this, scope, { player }, currentMediaMetadata).also { it.start() }
 
         // Auto lists lyrics as a static folder, so push a refresh whenever the sung line (or the
         // lyrics themselves) change while that folder is open.
@@ -10330,6 +10329,8 @@ class MusicService :
     }
 
     override fun onDestroy() {
+        lockScreenQueueNotifier?.stop()
+        lockScreenQueueNotifier = null
         // Released before anything else is torn down: once destruction has started no bound client
         // may obtain this service again (and the binder must stop pinning it).
         binder.release()
@@ -10493,6 +10494,16 @@ class MusicService :
         }
     }
 
+    private var lockScreenQueueNotifier: LockScreenQueueNotifier? = null
+
+    private fun jumpToQueueNeighbour(index: Int) {
+        if (index == androidx.media3.common.C.INDEX_UNSET) return
+        prepareForManualSkip()
+        player.seekTo(index, 0L)
+        player.prepare()
+        player.play()
+    }
+
     override fun onStartCommand(
         intent: Intent?,
         flags: Int,
@@ -10517,6 +10528,10 @@ class MusicService :
                     player.play()
                 }
             }
+
+            LockScreenQueueNotifier.ACTION_PREVIOUS -> jumpToQueueNeighbour(player.previousMediaItemIndex)
+
+            LockScreenQueueNotifier.ACTION_NEXT -> jumpToQueueNeighbour(player.nextMediaItemIndex)
 
             "moe.rukamori.archivetune.WIDGET_SKIP_PREV" -> {
                 if (player.hasPreviousMediaItem()) {

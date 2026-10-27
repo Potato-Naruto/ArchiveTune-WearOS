@@ -1037,4 +1037,5 @@
     <string name="lock_queue_previous">Previous</string>
     <string name="lock_queue_next">Next</string>
     <string name="lock_queue_empty">Nothing here</string>
+    <string name="lock_queue_channel">Lock screen queue</string>
 </resources>
